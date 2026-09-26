@@ -8,6 +8,7 @@ import {
   parseAgentToolCallInput,
   sameToken,
 } from "./agents/callback-token";
+import { createModelRoutes } from "./agents/model-routes";
 import type { BotAccessCheck } from "./agents/profile-policy";
 import type { AgentProfileStore } from "./agents/profile-store";
 import { createAgentRoutes } from "./agents/routes";
@@ -52,12 +53,9 @@ import { configuredAuthProviders, type DeploymentConfig } from "./config";
 import type { CredentialAdminService, CredentialInput } from "./credentials";
 import type { Database } from "./db/client";
 import { withoutStatement } from "./db/query-failure";
+import { mountDesktopConnectionFailure } from "./desktop-connection-failure";
 import { createTranscriptionProvider } from "./dictation/provider";
 import { createDictationRoutes } from "./dictation/routes";
-import { createVoiceProvider } from "./voice/provider";
-import { createVoiceRoutes } from "./voice/routes";
-import type { VoiceSessionServices } from "./voice/session-routes";
-import { mountDesktopConnectionFailure } from "./desktop-connection-failure";
 import type { HostAccessBroker } from "./host-access/broker";
 import { createHostAccessRoutes } from "./host-access/routes";
 import { createIntelligenceClient } from "./intelligence-client";
@@ -88,6 +86,9 @@ import {
 } from "./user-instructions";
 import type { UserPreferencesStore } from "./user-preferences";
 import { userPreferencesRoutes } from "./user-preferences-routes";
+import { createVoiceProvider } from "./voice/provider";
+import { createVoiceRoutes } from "./voice/routes";
+import type { VoiceSessionServices } from "./voice/session-routes";
 
 /**
  * How much of a multipart body is boundary, headers and other fields rather than file.
@@ -1148,6 +1149,16 @@ export function createApp(
   }
 
   if (agentProfileStore) {
+    app.route(
+      "/api/agents",
+      createModelRoutes({
+        store: agentProfileStore,
+        requireUser,
+        managed: config.managedAgent,
+        allowPrivateHosts: config.computer?.allowPrivateHosts ?? false,
+        allowedHosts: config.agentEndpointAllowedHosts,
+      }),
+    );
     app.route(
       "/api/agents",
       createAgentRoutes(

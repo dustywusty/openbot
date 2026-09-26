@@ -31,6 +31,50 @@ const validInput: CreateAgentInput = {
   visibility: "private",
 };
 
+test("local coding profiles require native opt-in, administrator ownership, and private visibility", async () => {
+  const previous = process.env.OPENBOT_LOCAL_AGENTS;
+  const body = {
+    ...validInput,
+    codingAgent: {
+      framework: "codex",
+      cwd: process.cwd(),
+      permission: "read-only",
+      defaults: {},
+    },
+  };
+  const administrator = { ...actor, role: "admin" as const };
+  const requireAdministrator: MiddlewareHandler<{
+    Variables: AppVariables;
+  }> = async (context, next) => {
+    context.set("actor", administrator);
+    await next();
+  };
+  const post = (app: Hono<{ Variables: AppVariables }>, input = body) =>
+    app.request("/", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(input),
+    });
+  try {
+    delete process.env.OPENBOT_LOCAL_AGENTS;
+    expect((await post(appFor(fakeStore(), requireAdministrator))).status).toBe(
+      403,
+    );
+    process.env.OPENBOT_LOCAL_AGENTS = "1";
+    expect((await post(appFor(fakeStore()))).status).toBe(403);
+    expect((await post(appFor(fakeStore(), requireAdministrator))).status).toBe(
+      201,
+    );
+    expect(parseAgentInput({ ...body, visibility: "public" }).ok).toBe(false);
+    expect(
+      parseAgentInput({ ...body, endpoint: "https://agent.example.test" }).ok,
+    ).toBe(false);
+  } finally {
+    if (previous === undefined) delete process.env.OPENBOT_LOCAL_AGENTS;
+    else process.env.OPENBOT_LOCAL_AGENTS = previous;
+  }
+});
+
 function profile(overrides: Partial<AgentProfile> = {}): AgentProfile {
   return {
     id: "agent-1",
@@ -318,7 +362,9 @@ describe("agent lifecycle routes", () => {
         actor,
         { ...validInput, systemPrompt: validInput.roleDescription },
       ],
+      ["get", actor, "agent-1"],
       ["update", actor, "agent-1", validInput],
+      ["get", actor, "agent-1"],
       ["duplicate", actor, "agent-1"],
       ["setHidden", actor, "agent-1", true],
       ["setHidden", actor, "agent-1", false],
@@ -458,6 +504,7 @@ describe("agent lifecycle routes", () => {
     };
     expect(store.calls).toEqual([
       ["create", actor, expected],
+      ["get", actor, "agent-1"],
       ["update", actor, "agent-1", expected],
     ]);
   });

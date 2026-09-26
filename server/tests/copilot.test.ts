@@ -597,6 +597,45 @@ describe("standing agent roles", () => {
     expect(result?.newMessages?.at(-1)?.content).toBe("Categorized.");
   });
 
+  test("reads saved conversation settings for each turn and replaces client model props", async () => {
+    await using endpoint = fakeAgUiEndpoint();
+    let saved: { model?: string; effort?: string } = {
+      model: "saved-model",
+      effort: "low",
+    };
+    const seenThreads: string[] = [];
+    const agents = await buildAgents(
+      [
+        {
+          ...remoteAgent(endpoint.url),
+          modelForThread: async (threadId: string) => {
+            seenThreads.push(threadId);
+            return saved;
+          },
+        },
+      ],
+      { provider: "openai", defaultModel: "global-model" },
+      null,
+    );
+    const agent = agents.agent_expense!;
+    agent.setMessages([userMessage("First turn")]);
+    await agent.runAgent({
+      forwardedProps: {
+        openbotModel: { model: "untrusted", apiKey: "never-forward" },
+      },
+    });
+    expect(endpoint.requests[0]?.forwardedProps).toMatchObject({
+      openbotModel: { model: "saved-model", effort: "low" },
+    });
+    expect(seenThreads[0]).toBe(endpoint.requests[0]?.threadId);
+    saved = {};
+    agent.setMessages([userMessage("Reset to default")]);
+    await agent.runAgent();
+    expect(endpoint.requests[1]?.forwardedProps).toMatchObject({
+      openbotModel: {},
+    });
+  });
+
   test("keeps the standing role out of forwarded props and agent state", async () => {
     await using endpoint = fakeAgUiEndpoint();
     const agents = await buildAgents(

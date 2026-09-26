@@ -4,6 +4,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { z } from "zod";
 import { AgentCard } from "@/components/agents/agent-card";
 import { AgentDialog } from "@/components/agents/agent-dialog";
+import { CodingAgentCreator } from "@/components/agents/coding-profile";
 import { CreateAgentDialog } from "@/components/agents/create-agent-dialog";
 import { SidebarToggleBar } from "@/components/layout/sidebar-toggle";
 import { StaggerItem } from "@/components/layout/stagger";
@@ -72,7 +73,9 @@ function AgentsScreen() {
               New agent
             </Button>
           </div>
+          <CodingAgentCreator />
           {loading ? (
+            // Keep the creation controls available separately from roster loading.
             // Approximate one row of cards while the roster loads.
             <Skeleton className="mt-4 h-[180px]" />
           ) : mine?.length ? (

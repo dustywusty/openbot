@@ -6,17 +6,18 @@ import {
   useAgent,
   useCopilotKit,
 } from "@copilotkit/react-core/v2";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useIsMutating, useMutation, useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { ModelControls } from "@/components/agents/model-controls";
 import { attachmentModality } from "@/components/channels/chat-messages";
 import { toAgentOptions } from "@/components/channels/composer";
 import { ConversationView } from "@/components/channels/conversation-view";
-import { VoiceCallWidget } from "@/components/channels/voice-call-widget";
 import {
   seedMessage,
   takeFirstMessage,
   transcriptMessages,
 } from "@/components/channels/transcript-messages";
+import { VoiceCallWidget } from "@/components/channels/voice-call-widget";
 import { agentListQueryOptions } from "@/lib/agents/queries";
 import { attachmentUrl } from "@/lib/channels/attachments";
 import {
@@ -41,14 +42,14 @@ import {
   voiceContext,
   withVoiceContext,
 } from "@/lib/voice/agent-bridge";
-import { useVoiceCall } from "@/lib/voice/use-voice-call";
 import {
-  loadVoiceArchive,
   cachedVoiceArchive,
+  loadVoiceArchive,
   useVoiceArchive,
   voiceArchiveContext,
   withVoiceChats,
 } from "@/lib/voice/archive";
+import { useVoiceCall } from "@/lib/voice/use-voice-call";
 import { queryClient } from "@/query-client";
 import { newId } from "../../lib/new-id";
 
@@ -251,6 +252,10 @@ export function ChannelChat({
   const { copilotkit } = useCopilotKit();
   // Mentions are scoped to the channel's permitted agents.
   const { data: agentProfiles } = useQuery(agentListQueryOptions());
+  const savingModel =
+    useIsMutating({
+      mutationKey: ["save-model", runtimeAgentId, channel.threadId],
+    }) > 0;
   const channelAgentId = `channel:${channel.id}`;
   const { agent, isReady } = useAgent({
     agentId: channelAgentId,
@@ -906,6 +911,12 @@ export function ChannelChat({
     >
       <ConversationProvider ask={askFromComponent}>
         <div className="relative isolate flex min-h-0 min-w-0 flex-1 flex-col">
+          <ModelControls
+            key={`${runtimeAgentId}:${channel.threadId}`}
+            agentId={runtimeAgentId}
+            threadId={channel.threadId}
+            busy={agent.isRunning || turnsInFlight > 0}
+          />
           <VoiceCallWidget
             call={call}
             name={
@@ -939,7 +950,7 @@ export function ChannelChat({
             // The `/` menu exposes only skills granted to this Bot.
             commands={skillCommands}
             // Readiness is handled by `say`; deletion is the only disabled-chat state.
-            disabled={!channel.active}
+            disabled={!channel.active || savingModel}
             messages={withVoiceChats(
               transcriptMessages(agent.messages, seed),
               voiceArchive.entries,

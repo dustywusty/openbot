@@ -14,6 +14,22 @@ import {
   timestamp,
 } from "drizzle-orm/pg-core";
 import { agents, users } from "./core";
+import { jsonb } from "./json";
+
+export const conversationModels = pgTable(
+  "conversation_models",
+  {
+    userId: text("user_id").notNull(),
+    agentId: text("agent_id")
+      .notNull()
+      .references(() => agents.id, { onDelete: "cascade" }),
+    threadId: text("thread_id").notNull(),
+    settings: jsonb("settings").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.userId, table.agentId, table.threadId] }),
+  ],
+);
 
 const createdAt = () =>
   timestamp("created_at", { withTimezone: true }).notNull().defaultNow();

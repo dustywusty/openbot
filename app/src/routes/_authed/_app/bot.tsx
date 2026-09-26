@@ -1,7 +1,8 @@
 import { CopilotChat } from "@copilotkit/react-core/v2";
 import { IconPlus } from "@tabler/icons-react";
-import { useQuery } from "@tanstack/react-query";
+import { useIsMutating, useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
+import { ModelControls } from "@/components/agents/model-controls";
 import { SidebarToggleBar } from "@/components/layout/sidebar-toggle";
 import { Button } from "@/components/ui/button";
 import { defaultAgentId } from "@/lib/agents/default-agent";
@@ -127,6 +128,8 @@ function RouteComponent() {
 }
 
 function BotChat({ agentId, name }: { agentId: string; name: string }) {
+  const savingModel =
+    useIsMutating({ mutationKey: ["save-model", agentId] }) > 0;
   // Tool calls here act on this Bot's own computer.
   useActiveBot(agentId);
   /*
@@ -205,7 +208,14 @@ function BotChat({ agentId, name }: { agentId: string; name: string }) {
           {stopped}
         </p>
       ) : null}
-      <div className="min-h-0 flex-1">
+      <div className="flex min-h-0 flex-1 flex-col">
+        {threadId && (
+          <ModelControls
+            key={`${agentId}:${threadId}`}
+            agentId={agentId}
+            threadId={threadId}
+          />
+        )}
         {/*
          * Keyed on the thread as well as the agent. Switching agents was already handled by
          * `agentId`, but `startNew` changes only the thread while the agent stays put, and the
@@ -216,11 +226,13 @@ function BotChat({ agentId, name }: { agentId: string; name: string }) {
          * under a composer that silently posts to the new one.
          */}
         {threadId ? (
-          <CopilotChat
-            agentId={agentId}
-            key={`${agentId}:${threadId}`}
-            threadId={threadId}
-          />
+          <div className="min-h-0 flex-1" inert={savingModel}>
+            <CopilotChat
+              agentId={agentId}
+              key={`${agentId}:${threadId}`}
+              threadId={threadId}
+            />
+          </div>
         ) : null}
       </div>
     </div>

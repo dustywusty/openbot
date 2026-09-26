@@ -1124,6 +1124,11 @@ fn write_host_pid_file<T: Serialize>(root: &Path, value: &T) -> Result<(), Probl
 /// reach the worker running model tools or the frontend development server.
 fn configure_host_process_env(command: &mut Command, name: &str, secrets: &Secrets) {
     command.envs(secrets);
+    if name == "server" {
+        command.env("OPENBOT_LOCAL_AGENTS", "1");
+    } else {
+        command.env_remove("OPENBOT_LOCAL_AGENTS");
+    }
     if name != "server" {
         command.env_remove("OPENBOT_DESKTOP_HOST_TOKEN");
     }
@@ -3375,6 +3380,10 @@ mod tests {
             assert_eq!(
                 vars[std::ffi::OsStr::new("INTELLIGENCE_API_KEY")],
                 Some(std::ffi::OsStr::new("other-fixture"))
+            );
+            assert_eq!(
+                vars[std::ffi::OsStr::new("OPENBOT_LOCAL_AGENTS")],
+                (name == "server").then_some(std::ffi::OsStr::new("1"))
             );
         }
     }

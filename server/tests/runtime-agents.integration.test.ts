@@ -118,6 +118,7 @@ describe("runtime agent loading", () => {
     const loaded = await loadAgents(owner);
 
     expect(loaded).toContainEqual({
+      modelForThread: expect.any(Function),
       id: profile.id,
       name: "Expense Manager",
       type: "remote_ag_ui",
@@ -147,6 +148,7 @@ describe("runtime agent loading", () => {
     const loaded = await loadAgents(owner);
 
     expect(loaded).toContainEqual({
+      modelForThread: expect.any(Function),
       id: profile.id,
       name: "Expense Manager",
       type: "remote_mastra",
@@ -202,6 +204,7 @@ describe("runtime agent loading", () => {
 
     expect(vaultReads).toEqual([credentialId]);
     expect(loaded).toContainEqual({
+      modelForThread: expect.any(Function),
       id: profile.id,
       name: "Research Mastra",
       type: "remote_mastra",

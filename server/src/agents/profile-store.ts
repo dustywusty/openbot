@@ -1,13 +1,20 @@
 import { and, eq, isNotNull, isNull, or } from "drizzle-orm";
-import type { CredentialStore } from "../credentials";
+import { parseCodingAgent } from "../../../shared/coding-agent";
+import {
+  type ModelSettings,
+  parseModelSettings,
+} from "../../../shared/model-settings";
+import { type CredentialStore, createCredentialStore } from "../credentials";
 import type { Database } from "../db/client";
 import {
   agentPreferences,
   agentProfiles,
   agents,
+  conversationModels,
   deploymentPackages,
 } from "../db/schema";
 import {
+  agentAuthHeaders,
   authFromConfiguration,
   retireReplacedKey,
   storeAgentAuth,
@@ -31,6 +38,16 @@ type DatabaseExecutor = Pick<Database, "select"> | Pick<Transaction, "select">;
 export type ProfileReadExecutor = DatabaseExecutor;
 
 export type AgentProfileStore = {
+  modelConnection?(
+    actor: AgentActor,
+    id: string,
+  ): Promise<{ endpoint: string; headers?: Record<string, string> } | null>;
+  threadModel?(
+    actor: AgentActor,
+    id: string,
+    threadId: string,
+    settings?: ModelSettings,
+  ): Promise<ModelSettings>;
   list(actor: AgentActor, hidden?: boolean): Promise<AgentProfile[]>;
   get(actor: AgentActor, id: string): Promise<AgentProfile | null>;
   /**
@@ -179,6 +196,11 @@ function mapProfile(
     hidden: row.hiddenAt !== null,
     deletedAt: row.deletedAt,
     endpoint: endpointOf(row.configuration),
+    ...(row.configuration &&
+    typeof row.configuration === "object" &&
+    "codingAgent" in row.configuration
+      ? { codingAgent: parseCodingAgent(row.configuration.codingAgent) }
+      : {}),
     // Whether a key is set, never which. The form needs to show "a key is set" so a person does not
     // wipe one by saving an unrelated edit; showing the value would put a secret in a screenshot.
     hasAuth: authFromConfiguration(row.configuration) !== null,
@@ -265,6 +287,19 @@ export function runForDuplicate(
   managed: Record<string, unknown> | undefined,
 ): AgentRun | null {
   const systemPrompt = systemPromptOf(source.configuration);
+  if (
+    source.configuration &&
+    typeof source.configuration === "object" &&
+    "codingAgent" in source.configuration
+  ) {
+    return {
+      type: "built_in",
+      configuration: {
+        systemPrompt,
+        codingAgent: parseCodingAgent(source.configuration.codingAgent),
+      },
+    };
+  }
   if (source.type === "built_in" && systemPrompt) {
     return { type: "built_in", configuration: { systemPrompt } };
   }
@@ -392,6 +427,55 @@ export function createAgentProfileStore(
     : undefined;
 
   return {
+    async modelConnection(actor, id) {
+      const profile = await findAccessibleProfile(database, actor, id);
+      if (!profile || profile.deletedAt || !profile.endpoint) return null;
+      const [row] = await database
+        .select({ configuration: agents.configuration })
+        .from(agents)
+        .where(eq(agents.id, id));
+      const auth = authFromConfiguration(row?.configuration);
+      const headers = vault
+        ? await agentAuthHeaders({
+            reader: createCredentialStore(database),
+            encryptionKey: vault.encryptionKey,
+            auth,
+          })
+        : undefined;
+      if (auth && !headers) throw new Error("Agent credential is unavailable.");
+      return { endpoint: profile.endpoint, headers };
+    },
+    async threadModel(actor, id, threadId, settings) {
+      const profile = await findAccessibleProfile(database, actor, id);
+      if (!profile || profile.deletedAt) throw new AgentNotFoundError(id);
+      // Preferences are private to this actor. A guessed thread id reveals no conversation data.
+      if (settings !== undefined) {
+        const value = parseModelSettings(settings);
+        await database
+          .insert(conversationModels)
+          .values({ userId: actor.id, agentId: id, threadId, settings: value })
+          .onConflictDoUpdate({
+            target: [
+              conversationModels.userId,
+              conversationModels.agentId,
+              conversationModels.threadId,
+            ],
+            set: { settings: value },
+          });
+        return value;
+      }
+      const [row] = await database
+        .select()
+        .from(conversationModels)
+        .where(
+          and(
+            eq(conversationModels.userId, actor.id),
+            eq(conversationModels.agentId, id),
+            eq(conversationModels.threadId, threadId),
+          ),
+        );
+      return parseModelSettings(row?.settings ?? {});
+    },
     async list(actor, hidden = false) {
       const rows = await joinedProfiles(database, actor).where(
         and(
@@ -421,7 +505,17 @@ export function createAgentProfileStore(
           ? { endpoint: input.endpoint }
           : managedConfiguration;
         const systemPrompt = input.systemPrompt?.trim();
-        if (endpoint) {
+        if (input.codingAgent) {
+          await transaction.insert(agents).values({
+            id,
+            name: input.name,
+            type: "built_in",
+            configuration: {
+              codingAgent: input.codingAgent,
+              systemPrompt: input.roleDescription,
+            },
+          });
+        } else if (endpoint) {
           await transaction.insert(agents).values({
             id,
             name: input.name,
@@ -534,6 +628,7 @@ export function createAgentProfileStore(
            */
           const configuration = {
             ...previous,
+            ...(input.codingAgent ? { codingAgent: input.codingAgent } : {}),
             ...(row?.type === "built_in"
               ? { systemPrompt: input.roleDescription }
               : {}),

@@ -1,8 +1,16 @@
 import type { Context, MiddlewareHandler } from "hono";
 import { Hono } from "hono";
+import { parseCodingAgent } from "../../../shared/coding-agent";
+import { validateModelChoice } from "../../../shared/model-settings";
 import type { AuditEventType, AuditStore } from "../audit";
 import { recordAuditEvent } from "../audit";
 import type { AppVariables } from "../auth/guards";
+import {
+  checkCodingFolder,
+  codingRuntime,
+  localCodingEnabled,
+  stopCodingRuntime,
+} from "./coding-runtime";
 import { testAgentConnection } from "./connection-test";
 import { checkAgentEndpoint } from "./endpoint";
 import { canManageAgent } from "./profile-policy";
@@ -24,6 +32,7 @@ type AgentInputParseResult =
   | { ok: false; error: string };
 
 type AgentInputObject = {
+  codingAgent?: unknown;
   name?: unknown;
   title?: unknown;
   roleDescription?: unknown;
@@ -120,9 +129,31 @@ export function parseAgentInput(
     }
   }
 
+  let codingAgent: ReturnType<typeof parseCodingAgent> | undefined;
+  if (input.codingAgent !== undefined) {
+    try {
+      codingAgent = parseCodingAgent(input.codingAgent);
+    } catch (error) {
+      return { ok: false, error: (error as Error).message };
+    }
+    if (endpoint || auth || visibility !== "private")
+      return {
+        ok: false,
+        error:
+          "Coding profiles must be private and use their local CLI account.",
+      };
+  }
   return {
     ok: true,
-    value: { name, title, roleDescription, visibility, endpoint, auth },
+    value: {
+      name,
+      title,
+      roleDescription,
+      visibility,
+      endpoint,
+      auth,
+      ...(codingAgent ? { codingAgent } : {}),
+    },
   };
 }
 
@@ -296,6 +327,71 @@ export function createAgentRoutes(
       typeof agent.endpoint === "string" && agent.endpoint === managedEndpoint,
   });
   const routes = new Hono<{ Variables: AppVariables }>();
+  async function validateCoding(
+    context: Context<{ Variables: AppVariables }>,
+    input: CreateAgentInput,
+    existing?: AgentProfile | null,
+  ) {
+    const config = input.codingAgent ?? existing?.codingAgent;
+    if (!config) return null;
+    if (!localCodingEnabled() || context.var.actor.role !== "admin")
+      return context.json(
+        {
+          error:
+            "Local coding profiles require an administrator on a native local deployment.",
+        },
+        403,
+      );
+    if (
+      existing?.codingAgent &&
+      codingRuntime(existing.id, existing.codingAgent).status().activeRuns > 0
+    )
+      return context.json(
+        { error: "Stop the running turn before changing this profile." },
+        409,
+      );
+    if (existing && existing.ownerUserId !== context.var.actor.id)
+      return context.json(
+        { error: "Only the owner can change this coding profile." },
+        403,
+      );
+    if (input.visibility !== "private" || input.endpoint || input.auth)
+      return context.json(
+        {
+          error:
+            "Local coding profiles must stay private and use their CLI account.",
+        },
+        400,
+      );
+    try {
+      input.codingAgent = await checkCodingFolder(config);
+    } catch {
+      return context.json(
+        { error: "That working folder is not accessible on this computer." },
+        400,
+      );
+    }
+    if (input.codingAgent.defaults.model || input.codingAgent.defaults.effort) {
+      const probeId = `validate:${context.var.actor.id}`;
+      try {
+        validateModelChoice(
+          input.codingAgent.defaults,
+          await codingRuntime(probeId, input.codingAgent).models(),
+        );
+      } catch {
+        return context.json(
+          {
+            error:
+              "The default model or effort is unavailable. Check the CLI sign-in and model list.",
+          },
+          400,
+        );
+      } finally {
+        stopCodingRuntime(probeId);
+      }
+    }
+    return null;
+  }
 
   /**
    * The Bot declined something, and says so.
@@ -379,7 +475,13 @@ export function createAgentRoutes(
    * the parameterised route on purpose, so "capabilities" can never be read as an agent id.
    */
   routes.get("/capabilities", requireUser, (context) =>
-    context.json({ capabilities: { builtInAvailable } }),
+    context.json({
+      capabilities: {
+        builtInAvailable,
+        localCodingAvailable:
+          localCodingEnabled() && context.var.actor.role === "admin",
+      },
+    }),
   );
 
   routes.get("/:agentId", requireUser, async (context) => {
@@ -477,6 +579,8 @@ export function createAgentRoutes(
       allowedHosts,
     );
     if (!parsed.ok) return context.json({ error: parsed.error }, 400);
+    const codingError = await validateCoding(context, parsed.value);
+    if (codingError) return codingError;
 
     try {
       /*
@@ -524,6 +628,12 @@ export function createAgentRoutes(
       allowedHosts,
     );
     if (!parsed.ok) return context.json({ error: parsed.error }, 400);
+    const codingError = await validateCoding(
+      context,
+      parsed.value,
+      await store.get(context.var.actor, context.req.param("agentId")),
+    );
+    if (codingError) return codingError;
 
     try {
       const agent = await store.update(
@@ -561,6 +671,20 @@ export function createAgentRoutes(
       return context.json({ error: "A Bot id is required." }, 400);
     }
     try {
+      const source = await store.get(
+        context.var.actor,
+        context.req.param("agentId"),
+      );
+      if (
+        source?.codingAgent &&
+        (!localCodingEnabled() ||
+          context.var.actor.role !== "admin" ||
+          source.ownerUserId !== context.var.actor.id)
+      )
+        return context.json(
+          { error: "Only the local owner can duplicate this coding profile." },
+          403,
+        );
       const agent = await store.duplicate(
         context.var.actor,
         context.req.param("agentId"),
@@ -655,6 +779,7 @@ export function createAgentRoutes(
     }
     try {
       await store.softDelete(context.var.actor, context.req.param("agentId"));
+      stopCodingRuntime(context.req.param("agentId"));
       await record(context, "bot.deleted", context.req.param("agentId"));
       return context.body(null, 204);
     } catch (error) {
@@ -730,6 +855,7 @@ function agentDto(actor: AgentActor, agent: AgentProfile) {
     // and any credential for it lives in the vault, never in this row.
     endpoint: agent.endpoint,
     hasAuth: agent.hasAuth,
+    ...(agent.codingAgent ? { codingAgent: agent.codingAgent } : {}),
     // Whether one exists, never what it is.
     hasCallbackToken: agent.hasCallbackToken,
     canManage: canManageAgent(actor, agent),
