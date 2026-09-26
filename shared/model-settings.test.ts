@@ -16,6 +16,17 @@ const capabilities: ModelCapabilities = {
   ],
 };
 describe("conversation model choices", () => {
+  test("accepts ultra only when the selected model advertises it", () => {
+    const settings = parseModelSettings({ effort: "ultra" });
+    expect(settings).toEqual({ effort: "ultra" });
+    expect(() => validateModelChoice(settings, capabilities)).toThrow();
+    expect(() =>
+      validateModelChoice(settings, {
+        ...capabilities,
+        models: [{ id: "reasoning", name: "Reasoning", efforts: ["ultra"] }],
+      }),
+    ).not.toThrow();
+  });
   test("rejects provider endpoints and credentials in per-turn settings", () => {
     for (const input of [
       null,

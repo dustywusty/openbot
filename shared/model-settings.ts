@@ -36,9 +36,16 @@ export function parseModelSettings(value: unknown): ModelSettings {
   if (input.effort !== undefined && input.effort !== "") {
     if (
       typeof input.effort !== "string" ||
-      !["none", "minimal", "low", "medium", "high", "xhigh", "max"].includes(
-        input.effort,
-      )
+      ![
+        "none",
+        "minimal",
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max",
+        "ultra",
+      ].includes(input.effort)
     ) {
       throw new Error("Unknown reasoning effort.");
     }
