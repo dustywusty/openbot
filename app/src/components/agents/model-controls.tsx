@@ -1,5 +1,8 @@
+import { IconChevronDown, IconGauge, IconRefresh } from "@tabler/icons-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useId, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { NativeSelect } from "@/components/ui/native-select";
 import { client } from "@/lib/client";
 import type {
   ModelCapabilities,
@@ -22,6 +25,7 @@ export function ModelControls({
   threadId: string;
   busy?: boolean;
 }) {
+  const fieldId = useId();
   const cache = useQueryClient();
   const base = `/api/agents/${encodeURIComponent(agentId)}`;
   const path = `${base}/threads/${encodeURIComponent(threadId)}/model`;
@@ -59,18 +63,22 @@ export function ModelControls({
   );
   const disabled = busy || save.isPending || !settings.data;
   return (
-    <div className="border-b px-4 py-2 text-xs">
-      <div className="flex flex-wrap items-center gap-3">
+    <div className="border-b border-border/60 bg-background px-4 py-3 text-sm">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
         {models.data ? (
           <>
-            <span className="text-muted-foreground">
+            <span className="rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground">
               {models.data.framework}
             </span>
-            <label className="flex items-center gap-1">
+            <label
+              htmlFor={`${fieldId}-model`}
+              className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground"
+            >
               Model
-              <select
+              <NativeSelect
+                id={`${fieldId}-model`}
                 aria-label="Conversation model"
-                className="rounded border bg-background px-2 py-1"
+                className="h-8 max-w-[240px] text-xs text-foreground"
                 disabled={disabled}
                 value={current.model ?? ""}
                 onChange={(event) =>
@@ -93,14 +101,18 @@ export function ModelControls({
                 {current.model && !selectedOption && (
                   <option value={current.model}>{current.model}</option>
                 )}
-              </select>
+              </NativeSelect>
             </label>
             {(selectedOption?.efforts.length ?? 0) > 0 && (
-              <label className="flex items-center gap-1">
+              <label
+                htmlFor={`${fieldId}-effort`}
+                className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground"
+              >
                 Effort
-                <select
+                <NativeSelect
+                  id={`${fieldId}-effort`}
                   aria-label="Reasoning effort"
-                  className="rounded border bg-background px-2 py-1"
+                  className="h-8 max-w-[240px] text-xs text-foreground"
                   disabled={disabled}
                   value={current.effort ?? ""}
                   onChange={(event) =>
@@ -118,7 +130,7 @@ export function ModelControls({
                       {effort}
                     </option>
                   ))}
-                </select>
+                </NativeSelect>
               </label>
             )}
             {models.data.customModels && (
@@ -149,7 +161,7 @@ export function ModelControls({
                 </form>
               </details>
             )}
-            <span className="text-muted-foreground">
+            <span className="text-xs text-muted-foreground">
               {save.isPending ? "Saving…" : "Applies to the next turn"}
             </span>
           </>
@@ -162,14 +174,20 @@ export function ModelControls({
                 : "This agent does not expose model controls"}
           </span>
         )}
-        <button
+        <Button
           type="button"
-          className="ml-auto underline underline-offset-2"
+          variant="ghost"
+          size="sm"
+          className="ml-auto gap-2 text-muted-foreground"
           aria-expanded={showUsage}
           onClick={() => setShowUsage(!showUsage)}
         >
+          <IconGauge className="size-3.5" />
           Account usage
-        </button>
+          <IconChevronDown
+            className={`size-3.5 transition-transform ${showUsage ? "rotate-180" : ""}`}
+          />
+        </Button>
       </div>
       {(save.error || settings.error) && (
         <p className="pt-2 text-destructive" role="alert">
@@ -177,7 +195,10 @@ export function ModelControls({
         </p>
       )}
       {showUsage && (
-        <div className="mt-2 rounded border p-3" aria-live="polite">
+        <div
+          className="mt-3 max-w-xl rounded-xl border border-border/60 bg-card p-4 text-xs"
+          aria-live="polite"
+        >
           {usage.isPending ? (
             "Loading account usage…"
           ) : usage.isError ? (
@@ -195,20 +216,29 @@ export function ModelControls({
             "This agent does not expose account usage."
           ) : (
             <>
-              <p>{usage.data.label}</p>
+              <p className="font-medium text-foreground">{usage.data.label}</p>
               {usage.data.status === "available" &&
                 usage.data.windows.map((window) => (
-                  <div key={window.label} className="mt-2">
+                  <div key={window.label} className="mt-4 space-y-2">
                     <div className="flex justify-between">
                       <span>{window.label}</span>
-                      <span>{window.usedPercent}% used</span>
+                      <span className="tabular-nums text-muted-foreground">
+                        {window.usedPercent}% used
+                      </span>
                     </div>
-                    <progress
-                      className="w-full"
-                      max={100}
-                      value={window.usedPercent}
+                    <div
+                      role="progressbar"
+                      aria-valuemin={0}
+                      aria-valuemax={100}
+                      aria-valuenow={window.usedPercent}
                       aria-label={window.label}
-                    />
+                      className="h-1.5 overflow-hidden rounded-full bg-muted"
+                    >
+                      <div
+                        className="h-full rounded-full bg-primary transition-[width]"
+                        style={{ width: `${window.usedPercent}%` }}
+                      />
+                    </div>
                     {window.resetsAt !== null && (
                       <p className="text-muted-foreground">
                         Resets{" "}
@@ -222,14 +252,17 @@ export function ModelControls({
                   Updated {new Date(usage.data.updatedAt).toLocaleString()}
                 </p>
               )}
-              <button
+              <Button
                 type="button"
+                variant="ghost"
+                size="sm"
                 disabled={usage.isFetching}
-                className="mt-2 underline"
+                className="-ml-2 mt-2 text-muted-foreground"
                 onClick={() => void usage.refetch()}
               >
+                <IconRefresh className="size-3" />
                 Refresh
-              </button>
+              </Button>
             </>
           )}
         </div>

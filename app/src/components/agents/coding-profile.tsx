@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useId, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { NativeSelect } from "@/components/ui/native-select";
 import {
   type AgentProfile,
   agentCapabilitiesQueryOptions,
@@ -39,6 +40,7 @@ export function CodingProfileEditor({
   profile?: AgentProfile;
   onSaved?: () => void;
 }) {
+  const fieldId = useId();
   const cache = useQueryClient();
   const [name, setName] = useState(profile?.name ?? "");
   const [role, setRole] = useState(
@@ -114,16 +116,17 @@ export function CodingProfileEditor({
     (model) =>
       model.id === (config.defaults.model ?? models.data?.defaultModel),
   );
-  const field = "mt-1 w-full rounded border bg-background px-3 py-2 text-sm";
+  const field =
+    "w-full rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/20";
   return (
     <form
-      className="mt-4 flex flex-col gap-4 text-sm"
+      className="mt-2 flex flex-col gap-5 text-sm"
       onSubmit={(event) => {
         event.preventDefault();
         save.mutate();
       }}
     >
-      <label>
+      <label className="grid min-w-0 gap-2">
         Name
         <input
           className={field}
@@ -134,10 +137,10 @@ export function CodingProfileEditor({
           placeholder="Codex · OpenBot"
         />
       </label>
-      <label>
+      <label htmlFor={`${fieldId}-framework`} className="grid min-w-0 gap-2">
         Framework
-        <select
-          className={field}
+        <NativeSelect
+          id={`${fieldId}-framework`}
           disabled={Boolean(profile)}
           value={config.framework}
           onChange={(event) =>
@@ -150,15 +153,15 @@ export function CodingProfileEditor({
         >
           <option value="codex">Codex (ChatGPT account)</option>
           <option value="claude">Claude Agent SDK (Claude Code account)</option>
-        </select>
+        </NativeSelect>
       </label>
-      <p className="text-muted-foreground">
+      <p className="-mt-2 text-xs leading-relaxed text-muted-foreground">
         {config.framework === "codex"
           ? "Uses the account signed in with codex login. Codex must be installed on this Mac."
           : "Uses your local Claude Code sign-in. File reading and editing are supported; shell commands are not enabled in this profile."}{" "}
         OpenBot’s deployment API keys are not passed to this process.
       </p>
-      <label>
+      <label className="grid min-w-0 gap-2">
         Working folder
         <input
           className={field}
@@ -170,10 +173,10 @@ export function CodingProfileEditor({
           placeholder="/Users/you/projects/my-project"
         />
       </label>
-      <label>
+      <label htmlFor={`${fieldId}-permission`} className="grid min-w-0 gap-2">
         Permissions
-        <select
-          className={field}
+        <NativeSelect
+          id={`${fieldId}-permission`}
           value={config.permission}
           onChange={(event) =>
             setConfig({
@@ -184,11 +187,12 @@ export function CodingProfileEditor({
         >
           <option value="read-only">Read only</option>
           <option value="workspace-write">Allow edits in this folder</option>
-        </select>
+        </NativeSelect>
       </label>
-      <label>
+      <label className="grid min-w-0 gap-2">
         Instructions
         <textarea
+          rows={3}
           className={field}
           required
           maxLength={1000}
@@ -197,11 +201,11 @@ export function CodingProfileEditor({
         />
       </label>
       {models.data && (
-        <div className="grid grid-cols-2 gap-3">
-          <label>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <label htmlFor={`${fieldId}-model`} className="grid min-w-0 gap-2">
             Default model
-            <select
-              className={field}
+            <NativeSelect
+              id={`${fieldId}-model`}
               value={config.defaults.model ?? ""}
               onChange={(event) =>
                 setConfig({
@@ -218,12 +222,12 @@ export function CodingProfileEditor({
                   {model.name}
                 </option>
               ))}
-            </select>
+            </NativeSelect>
           </label>
-          <label>
+          <label htmlFor={`${fieldId}-effort`} className="grid min-w-0 gap-2">
             Default effort
-            <select
-              className={field}
+            <NativeSelect
+              id={`${fieldId}-effort`}
               value={config.defaults.effort ?? ""}
               onChange={(event) =>
                 setConfig({
@@ -245,7 +249,7 @@ export function CodingProfileEditor({
                   {effort}
                 </option>
               ))}
-            </select>
+            </NativeSelect>
           </label>
         </div>
       )}
@@ -270,7 +274,7 @@ export function CodingProfileEditor({
           {save.error?.message ?? stop.error?.message}
         </p>
       )}
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2 border-t pt-4">
         <Button
           type="submit"
           disabled={save.isPending || Boolean(runtime.data?.activeRuns)}

@@ -145,8 +145,11 @@ function AgentDialogBody({ agentId }: { agentId: string }) {
     <>
       <DialogTitle className="sr-only">{profile.name}</DialogTitle>
       {/* min-h-full overrides the provider's own min-h-svh, which is sized for a page. */}
-      <SidebarProvider className="min-h-full items-start">
-        <Sidebar className="hidden md:flex" collapsible="none">
+      <SidebarProvider className="min-h-full items-stretch">
+        <Sidebar
+          className="hidden h-auto self-stretch border-r border-border/60 md:flex"
+          collapsible="none"
+        >
           {/* Who this dialog is about, said once here rather than repeated per section. */}
           <SidebarHeader className="flex-row items-center gap-3 p-4">
             <AbstractAvatar
