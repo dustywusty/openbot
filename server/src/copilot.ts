@@ -14,6 +14,11 @@ import {
   COMPUTER_GUIDANCE,
   PROVENANCE_GUIDANCE,
 } from "../../shared/bot-prompt";
+import {
+  type CodingAgentConfig,
+  parseCodingAgent,
+} from "../../shared/coding-agent";
+import { LocalCodingAgent, localCodingEnabled } from "./agents/coding-runtime";
 import { sanitizeSeededHistory } from "./agents/history-sanitize";
 import {
   PLAN_RUN_COMPLETED,
@@ -70,6 +75,9 @@ type RegisteredBuiltInAgent = {
 };
 
 type RegisteredRemoteAgentFacts = {
+  modelForThread?: (
+    threadId: string,
+  ) => Promise<import("../../shared/model-settings").ModelSettings>;
   id: string;
   name: string;
   endpoint: string;
@@ -108,6 +116,17 @@ type RegisteredUnavailableAgent = {
 };
 
 export type RegisteredAgent =
+  | {
+      id: string;
+      name: string;
+      type: "local_coding";
+      codingAgent: CodingAgentConfig;
+      role: string;
+      owner: string;
+      modelForThread?: (
+        threadId: string,
+      ) => Promise<import("../../shared/model-settings").ModelSettings>;
+    }
   | RegisteredBuiltInAgent
   | RegisteredRemoteAgent
   | RegisteredUnavailableAgent;
@@ -229,6 +248,26 @@ export function registeredAgentFromRow(
     return null;
   }
   const configuration = row.configuration;
+  if (configuration.codingAgent) {
+    if (!localCodingEnabled())
+      return {
+        id: row.id,
+        name: row.name,
+        type: "unavailable",
+        reason: "Local coding agents are disabled on this server.",
+      };
+    return {
+      id: row.id,
+      name: row.name,
+      type: "local_coding",
+      codingAgent: parseCodingAgent(configuration.codingAgent),
+      role:
+        typeof configuration.systemPrompt === "string"
+          ? configuration.systemPrompt
+          : "You are a coding assistant.",
+      owner: "",
+    };
+  }
   if (row.type === "built_in") {
     const systemPrompt = configuration?.systemPrompt;
     const trimmedSystemPrompt =
@@ -793,6 +832,16 @@ async function buildAgent(
   if (agent.type === "unavailable") {
     return new UnavailableAgent(agent);
   }
+  if (agent.type === "local_coding") {
+    return new LocalCodingAgent({
+      id: agent.id,
+      name: agent.name,
+      config: agent.codingAgent,
+      role: agent.role,
+      owner: agent.owner,
+      modelForThread: agent.modelForThread ?? (async () => ({})),
+    });
+  }
 
   const granted = await loadTools(agent.id);
 
@@ -1278,17 +1327,20 @@ function remoteAgentWithStandingRole(
      * this puts in front of the model what the person actually attached.
      */
     return from(
-      loadAttachment
-        ? inlineAttachments(
-            history,
-            loadAttachment,
-            // The conversation this run is in, which is what decides whose files it may reach.
-            input.threadId,
-            markAttachmentsSent,
-          )
-        : Promise.resolve(history),
+      Promise.all([
+        agent.modelForThread?.(input.threadId) ?? Promise.resolve({}),
+        loadAttachment
+          ? inlineAttachments(
+              history,
+              loadAttachment,
+              // The conversation this run is in, which is what decides whose files it may reach.
+              input.threadId,
+              markAttachmentsSent,
+            )
+          : Promise.resolve(history),
+      ]),
     ).pipe(
-      switchMap((messages) =>
+      switchMap(([modelSettings, messages]) =>
         next.run({
           ...input,
           messages: [
@@ -1328,7 +1380,7 @@ function remoteAgentWithStandingRole(
                 ]
               : input.context,
           // Who the Bot is calling back as, so the audit row names it rather than "an agent".
-          forwardedProps,
+          forwardedProps: { ...forwardedProps, openbotModel: modelSettings },
         } as never),
       ),
     );

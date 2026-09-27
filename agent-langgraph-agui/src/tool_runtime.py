@@ -18,6 +18,7 @@ from langchain_core.messages import SystemMessage, ToolMessage
 from langgraph.graph import END
 
 from .parallel_tools import ParallelToolAgent
+from .model_settings import parse_settings
 
 
 @dataclass(frozen=True)
@@ -27,6 +28,7 @@ class RunTools:
     deployment: frozenset[str] = frozenset()
     assertion: str = field(default="", repr=False)
     connection: dict = field(default_factory=dict, compare=False, repr=False)
+    model_settings: dict = field(default_factory=dict)
 
 
 _current: ContextVar[RunTools | None] = ContextVar("openbot_run_tools", default=None)
@@ -46,6 +48,7 @@ class ToolAwareAgent(ParallelToolAgent):
         names = props.get("openbotDeploymentTools", [])
         assertion = props.get("openbotRun", "")
         context = RunTools(
+            model_settings=parse_settings(props.get("openbotModel", {})),
             tools=tuple(input.tools or []),
             context=tuple(input.context or []),
             deployment=frozenset(name for name in names if isinstance(name, str))
@@ -65,6 +68,7 @@ class ToolAwareAgent(ParallelToolAgent):
                 if key
                 not in {
                     "openbotRun",
+                    "openbotModel",
                     "openbotDeploymentTools",
                     "openbot_run",
                     "openbot_deployment_tools",

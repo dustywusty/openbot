@@ -1,4 +1,5 @@
 import { and, eq, isNotNull, isNull, or } from "drizzle-orm";
+import { parseModelSettings } from "../../../shared/model-settings";
 import type { ManagedAgentConfig } from "../config";
 import { type RegisteredAgent, registeredAgentFromRow } from "../copilot";
 import type { CredentialSecretReader } from "../credentials";
@@ -9,6 +10,7 @@ import {
   channelAgents,
   channelMemberships,
   channels,
+  conversationModels,
 } from "../db/schema";
 import { agentAuthHeaders, authFromConfiguration } from "./auth-header";
 import type { AgentActor } from "./profile-types";
@@ -41,6 +43,25 @@ export function createRuntimeAgentLoader(
       if (!agent) continue;
       const isRemoteAgent =
         agent.type === "remote_ag_ui" || agent.type === "remote_mastra";
+      if (agent.type === "local_coding") {
+        if (row.ownerUserId !== actor.id || actor.role !== "admin") continue;
+        agent.owner = actor.id;
+      }
+      if (isRemoteAgent || agent.type === "local_coding") {
+        agent.modelForThread = async (threadId) => {
+          const [preference] = await database
+            .select({ settings: conversationModels.settings })
+            .from(conversationModels)
+            .where(
+              and(
+                eq(conversationModels.userId, actor.id),
+                eq(conversationModels.agentId, agent.id),
+                eq(conversationModels.threadId, threadId),
+              ),
+            );
+          return parseModelSettings(preference?.settings ?? {});
+        };
+      }
       // The key is resolved per load, rather than being cached on the row: revoking a
       // credential then takes effect on the next run rather than on the next restart.
       if (isRemoteAgent && vault) {
@@ -92,7 +113,9 @@ export function createRuntimeAgentLoader(
 }
 
 /** Keep the existing pathname slash tolerance without erasing query or fragment differences. */
-function managedEndpointIdentity(value: string | URL): string | undefined {
+export function managedEndpointIdentity(
+  value: string | URL,
+): string | undefined {
   try {
     const endpoint = new URL(value);
     endpoint.pathname = endpoint.pathname.replace(/\/+$/, "");
@@ -110,6 +133,7 @@ function selectActiveAgents(database: Database, actor: AgentActor) {
       name: agents.name,
       type: agents.type,
       configuration: agents.configuration,
+      ownerUserId: agentProfiles.ownerUserId,
       title: agentProfiles.title,
       roleDescription: agentProfiles.roleDescription,
     })

@@ -10,6 +10,7 @@ export type AgentVisibility = "public" | "private";
  * returned flags rather than recomputing ownership rules.
  */
 export type AgentProfile = {
+  codingAgent?: import("../../../../shared/coding-agent").CodingAgentConfig;
   id: string;
   name: string;
   title: string;
@@ -70,6 +71,7 @@ export const agentKeys = {
 
 /** What kinds of coworker this deployment can create. */
 export type AgentCapabilities = {
+  localCodingAvailable?: boolean;
   /** Whether a coworker can run on the deployment's own Bot, with no endpoint of its own. */
   builtInAvailable: boolean;
 };

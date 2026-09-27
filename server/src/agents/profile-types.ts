@@ -6,6 +6,7 @@ export type AgentActor = {
 };
 
 export type AgentProfile = {
+  codingAgent?: import("../../../shared/coding-agent").CodingAgentConfig;
   id: string;
   name: string;
   title: string;
@@ -33,6 +34,7 @@ export type CreateAgentInput = Pick<
   AgentProfile,
   "name" | "title" | "roleDescription" | "visibility"
 > & {
+  codingAgent?: import("../../../shared/coding-agent").CodingAgentConfig;
   /**
    * The AG-UI endpoint this Bot runs on, or undefined for the one in the box.
    *

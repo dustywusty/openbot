@@ -16,6 +16,7 @@ from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import START, MessagesState, StateGraph
 
 from .tool_runtime import (
+    current_tools,
     ToolAwareAgent,
     bind_tools,
     execute_tools,
@@ -115,7 +116,9 @@ def _model():
     A recognized `provider:model` choice keeps its provider. Otherwise the model is an opaque ID
     and the selected provider is passed separately, including when that ID contains a colon.
     """
-    configured_model = os.environ.get("BOT_MODEL")
+    settings = current_tools().model_settings
+    configured_model = settings.get("model") or os.environ.get("BOT_MODEL")
+    reasoning = {"reasoning": {"effort": settings["effort"]}} if settings.get("effort") else {}
     model = (configured_model or "gpt-4o-mini").strip()
     store = (os.environ.get("CHATGPT_AUTH_FILE") or "").strip()
     if store:
@@ -135,11 +138,15 @@ def _model():
         return _ChatOpenAICodex(
             model=model,
             token_provider=ChatGptTokenStore(path=store_path),
+            **reasoning,
         )
 
     _normalize_openai_base_url()
     provider = (os.environ.get("BOT_PROVIDER") or "").strip() or "openai"
     provider = _resolve_provider(provider)
+    base_prefix, base_separator, _ = (os.environ.get("BOT_MODEL") or "").partition(":")
+    if base_separator and base_prefix in MODEL_PROVIDERS:
+        provider = base_prefix
     if not configured_model:
         model = {
             "anthropic": "claude-sonnet-4-5",
@@ -147,10 +154,11 @@ def _model():
         }.get(provider, model)
     prefix, separator, _ = model.partition(":")
     if separator and prefix in MODEL_PROVIDERS:
-        return init_chat_model(model, **_google_genai_kwargs(prefix))
+        return init_chat_model(model, **reasoning, **_google_genai_kwargs(prefix))
     return init_chat_model(
         model,
         model_provider=provider,
+        **reasoning,
         **_google_genai_kwargs(provider),
     )
 
@@ -238,6 +246,18 @@ async def refuse_without_the_server_token(request: Request, call_next):
 @app.get("/health")
 async def health():
     return {"ok": True, "harness": "langgraph"}
+
+
+@app.get("/openbot/models")
+async def models():
+    from .model_settings import capabilities
+    return capabilities()
+
+
+@app.get("/openbot/usage")
+async def usage():
+    return {"status": "unsupported", "label": "This LangGraph connection does not expose account usage.",
+            "updatedAt": None, "windows": []}
 
 
 add_langgraph_fastapi_endpoint(
