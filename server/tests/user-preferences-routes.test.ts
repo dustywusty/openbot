@@ -56,6 +56,7 @@ test("preferences default to thread and persist separately for each authenticate
       selfHostBannerDismissed: false,
       narration: null,
       skin: "openbot",
+      chatWidth: "comfortable",
       proactive: "on",
     },
   });
@@ -70,6 +71,7 @@ test("preferences default to thread and persist separately for each authenticate
       selfHostBannerDismissed: false,
       narration: null,
       skin: "openbot",
+      chatWidth: "comfortable",
       proactive: "on",
     },
   });
@@ -79,6 +81,7 @@ test("preferences default to thread and persist separately for each authenticate
       selfHostBannerDismissed: false,
       narration: null,
       skin: "openbot",
+      chatWidth: "comfortable",
       proactive: "on",
     },
   });
@@ -138,6 +141,7 @@ test("saves the self-host banner dismissal without touching message list emphasi
       selfHostBannerDismissed: true,
       narration: null,
       skin: "openbot",
+      chatWidth: "comfortable",
       proactive: "on",
     },
   });
@@ -147,6 +151,7 @@ test("saves the self-host banner dismissal without touching message list emphasi
       selfHostBannerDismissed: false,
       narration: null,
       skin: "openbot",
+      chatWidth: "comfortable",
       proactive: "on",
     },
   });
@@ -168,6 +173,7 @@ test("keeps the person's narration choice without touching the others, and start
       selfHostBannerDismissed: false,
       narration: "on",
       skin: "openbot",
+      chatWidth: "comfortable",
       proactive: "on",
     },
   });
@@ -192,6 +198,7 @@ test("saves the skin on the account without touching the other preferences", asy
       selfHostBannerDismissed: false,
       narration: null,
       skin: "opendots",
+      chatWidth: "comfortable",
       proactive: "on",
     },
   });
@@ -202,6 +209,7 @@ test("saves the skin on the account without touching the other preferences", asy
       selfHostBannerDismissed: false,
       narration: null,
       skin: "opendots",
+      chatWidth: "comfortable",
       proactive: "on",
     },
   });
@@ -242,6 +250,7 @@ test("check-ins start on, and a person's off is kept without touching the others
       selfHostBannerDismissed: false,
       narration: null,
       skin: "openduet",
+      chatWidth: "comfortable",
       proactive: "off",
     },
   });
@@ -252,4 +261,25 @@ test("check-ins start on, and a person's off is kept without touching the others
   expect(
     (await (await appFor("alice").request(path)).json()).preferences.proactive,
   ).toBe("on");
+});
+
+test("chat width accepts only supported choices and stays scoped to the signed-in account", async () => {
+  const { appFor } = fixture();
+  const alice = appFor("alice");
+  for (const chatWidth of ["comfortable", "wide", "full"]) {
+    expect((await alice.request(path, patch({ chatWidth }))).status).toBe(200);
+    expect(
+      (await (await appFor("alice").request(path)).json()).preferences
+        .chatWidth,
+    ).toBe(chatWidth);
+    expect(
+      (await (await appFor("bob").request(path)).json()).preferences.chatWidth,
+    ).toBe("comfortable");
+  }
+  for (const chatWidth of ["huge", "", null, true, 900]) {
+    expect((await alice.request(path, patch({ chatWidth }))).status).toBe(400);
+  }
+  expect((await (await alice.request(path)).json()).preferences.chatWidth).toBe(
+    "full",
+  );
 });

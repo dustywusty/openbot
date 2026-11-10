@@ -2967,6 +2967,48 @@
           "markdownDescription": "Enables the check_update command without any pre-configured scope."
         },
         {
+          "description": "Enables the computer_auth_allow command without any pre-configured scope.",
+          "type": "string",
+          "const": "openbot-desktop:allow-computer-auth-allow",
+          "markdownDescription": "Enables the computer_auth_allow command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the computer_auth_cancel command without any pre-configured scope.",
+          "type": "string",
+          "const": "openbot-desktop:allow-computer-auth-cancel",
+          "markdownDescription": "Enables the computer_auth_cancel command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the computer_auth_logout command without any pre-configured scope.",
+          "type": "string",
+          "const": "openbot-desktop:allow-computer-auth-logout",
+          "markdownDescription": "Enables the computer_auth_logout command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the computer_auth_start command without any pre-configured scope.",
+          "type": "string",
+          "const": "openbot-desktop:allow-computer-auth-start",
+          "markdownDescription": "Enables the computer_auth_start command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the computer_auth_status command without any pre-configured scope.",
+          "type": "string",
+          "const": "openbot-desktop:allow-computer-auth-status",
+          "markdownDescription": "Enables the computer_auth_status command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the computer_disconnect command without any pre-configured scope.",
+          "type": "string",
+          "const": "openbot-desktop:allow-computer-disconnect",
+          "markdownDescription": "Enables the computer_disconnect command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the computer_register command without any pre-configured scope.",
+          "type": "string",
+          "const": "openbot-desktop:allow-computer-register",
+          "markdownDescription": "Enables the computer_register command without any pre-configured scope."
+        },
+        {
           "description": "Enables the dismiss_update command without any pre-configured scope.",
           "type": "string",
           "const": "openbot-desktop:allow-dismiss-update",
@@ -3007,6 +3049,12 @@
           "type": "string",
           "const": "openbot-desktop:allow-restart",
           "markdownDescription": "Enables the restart command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the service_usage command without any pre-configured scope.",
+          "type": "string",
+          "const": "openbot-desktop:allow-service-usage",
+          "markdownDescription": "Enables the service_usage command without any pre-configured scope."
         },
         {
           "description": "Enables the set_usage_data command without any pre-configured scope.",
@@ -3063,6 +3111,90 @@
           "markdownDescription": "Enables the usage_data command without any pre-configured scope."
         },
         {
+          "description": "Enables the workspace_create command without any pre-configured scope.",
+          "type": "string",
+          "const": "openbot-desktop:allow-workspace-create",
+          "markdownDescription": "Enables the workspace_create command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the workspace_delete command without any pre-configured scope.",
+          "type": "string",
+          "const": "openbot-desktop:allow-workspace-delete",
+          "markdownDescription": "Enables the workspace_delete command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the workspace_exec command without any pre-configured scope.",
+          "type": "string",
+          "const": "openbot-desktop:allow-workspace-exec",
+          "markdownDescription": "Enables the workspace_exec command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the workspace_list command without any pre-configured scope.",
+          "type": "string",
+          "const": "openbot-desktop:allow-workspace-list",
+          "markdownDescription": "Enables the workspace_list command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the workspace_logs command without any pre-configured scope.",
+          "type": "string",
+          "const": "openbot-desktop:allow-workspace-logs",
+          "markdownDescription": "Enables the workspace_logs command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the workspace_models command without any pre-configured scope.",
+          "type": "string",
+          "const": "openbot-desktop:allow-workspace-models",
+          "markdownDescription": "Enables the workspace_models command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the workspace_ports command without any pre-configured scope.",
+          "type": "string",
+          "const": "openbot-desktop:allow-workspace-ports",
+          "markdownDescription": "Enables the workspace_ports command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the workspace_prepare command without any pre-configured scope.",
+          "type": "string",
+          "const": "openbot-desktop:allow-workspace-prepare",
+          "markdownDescription": "Enables the workspace_prepare command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the workspace_recipe command without any pre-configured scope.",
+          "type": "string",
+          "const": "openbot-desktop:allow-workspace-recipe",
+          "markdownDescription": "Enables the workspace_recipe command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the workspace_stop command without any pre-configured scope.",
+          "type": "string",
+          "const": "openbot-desktop:allow-workspace-stop",
+          "markdownDescription": "Enables the workspace_stop command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the workspace_terminal_close command without any pre-configured scope.",
+          "type": "string",
+          "const": "openbot-desktop:allow-workspace-terminal-close",
+          "markdownDescription": "Enables the workspace_terminal_close command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the workspace_terminal_open command without any pre-configured scope.",
+          "type": "string",
+          "const": "openbot-desktop:allow-workspace-terminal-open",
+          "markdownDescription": "Enables the workspace_terminal_open command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the workspace_terminal_resize command without any pre-configured scope.",
+          "type": "string",
+          "const": "openbot-desktop:allow-workspace-terminal-resize",
+          "markdownDescription": "Enables the workspace_terminal_resize command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the workspace_terminal_write command without any pre-configured scope.",
+          "type": "string",
+          "const": "openbot-desktop:allow-workspace-terminal-write",
+          "markdownDescription": "Enables the workspace_terminal_write command without any pre-configured scope."
+        },
+        {
           "description": "Enables the zoom command without any pre-configured scope.",
           "type": "string",
           "const": "openbot-desktop:allow-zoom",
@@ -3091,6 +3223,48 @@
           "type": "string",
           "const": "openbot-desktop:deny-check-update",
           "markdownDescription": "Denies the check_update command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the computer_auth_allow command without any pre-configured scope.",
+          "type": "string",
+          "const": "openbot-desktop:deny-computer-auth-allow",
+          "markdownDescription": "Denies the computer_auth_allow command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the computer_auth_cancel command without any pre-configured scope.",
+          "type": "string",
+          "const": "openbot-desktop:deny-computer-auth-cancel",
+          "markdownDescription": "Denies the computer_auth_cancel command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the computer_auth_logout command without any pre-configured scope.",
+          "type": "string",
+          "const": "openbot-desktop:deny-computer-auth-logout",
+          "markdownDescription": "Denies the computer_auth_logout command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the computer_auth_start command without any pre-configured scope.",
+          "type": "string",
+          "const": "openbot-desktop:deny-computer-auth-start",
+          "markdownDescription": "Denies the computer_auth_start command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the computer_auth_status command without any pre-configured scope.",
+          "type": "string",
+          "const": "openbot-desktop:deny-computer-auth-status",
+          "markdownDescription": "Denies the computer_auth_status command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the computer_disconnect command without any pre-configured scope.",
+          "type": "string",
+          "const": "openbot-desktop:deny-computer-disconnect",
+          "markdownDescription": "Denies the computer_disconnect command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the computer_register command without any pre-configured scope.",
+          "type": "string",
+          "const": "openbot-desktop:deny-computer-register",
+          "markdownDescription": "Denies the computer_register command without any pre-configured scope."
         },
         {
           "description": "Denies the dismiss_update command without any pre-configured scope.",
@@ -3133,6 +3307,12 @@
           "type": "string",
           "const": "openbot-desktop:deny-restart",
           "markdownDescription": "Denies the restart command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the service_usage command without any pre-configured scope.",
+          "type": "string",
+          "const": "openbot-desktop:deny-service-usage",
+          "markdownDescription": "Denies the service_usage command without any pre-configured scope."
         },
         {
           "description": "Denies the set_usage_data command without any pre-configured scope.",
@@ -3187,6 +3367,90 @@
           "type": "string",
           "const": "openbot-desktop:deny-usage-data",
           "markdownDescription": "Denies the usage_data command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the workspace_create command without any pre-configured scope.",
+          "type": "string",
+          "const": "openbot-desktop:deny-workspace-create",
+          "markdownDescription": "Denies the workspace_create command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the workspace_delete command without any pre-configured scope.",
+          "type": "string",
+          "const": "openbot-desktop:deny-workspace-delete",
+          "markdownDescription": "Denies the workspace_delete command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the workspace_exec command without any pre-configured scope.",
+          "type": "string",
+          "const": "openbot-desktop:deny-workspace-exec",
+          "markdownDescription": "Denies the workspace_exec command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the workspace_list command without any pre-configured scope.",
+          "type": "string",
+          "const": "openbot-desktop:deny-workspace-list",
+          "markdownDescription": "Denies the workspace_list command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the workspace_logs command without any pre-configured scope.",
+          "type": "string",
+          "const": "openbot-desktop:deny-workspace-logs",
+          "markdownDescription": "Denies the workspace_logs command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the workspace_models command without any pre-configured scope.",
+          "type": "string",
+          "const": "openbot-desktop:deny-workspace-models",
+          "markdownDescription": "Denies the workspace_models command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the workspace_ports command without any pre-configured scope.",
+          "type": "string",
+          "const": "openbot-desktop:deny-workspace-ports",
+          "markdownDescription": "Denies the workspace_ports command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the workspace_prepare command without any pre-configured scope.",
+          "type": "string",
+          "const": "openbot-desktop:deny-workspace-prepare",
+          "markdownDescription": "Denies the workspace_prepare command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the workspace_recipe command without any pre-configured scope.",
+          "type": "string",
+          "const": "openbot-desktop:deny-workspace-recipe",
+          "markdownDescription": "Denies the workspace_recipe command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the workspace_stop command without any pre-configured scope.",
+          "type": "string",
+          "const": "openbot-desktop:deny-workspace-stop",
+          "markdownDescription": "Denies the workspace_stop command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the workspace_terminal_close command without any pre-configured scope.",
+          "type": "string",
+          "const": "openbot-desktop:deny-workspace-terminal-close",
+          "markdownDescription": "Denies the workspace_terminal_close command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the workspace_terminal_open command without any pre-configured scope.",
+          "type": "string",
+          "const": "openbot-desktop:deny-workspace-terminal-open",
+          "markdownDescription": "Denies the workspace_terminal_open command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the workspace_terminal_resize command without any pre-configured scope.",
+          "type": "string",
+          "const": "openbot-desktop:deny-workspace-terminal-resize",
+          "markdownDescription": "Denies the workspace_terminal_resize command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the workspace_terminal_write command without any pre-configured scope.",
+          "type": "string",
+          "const": "openbot-desktop:deny-workspace-terminal-write",
+          "markdownDescription": "Denies the workspace_terminal_write command without any pre-configured scope."
         },
         {
           "description": "Denies the zoom command without any pre-configured scope.",

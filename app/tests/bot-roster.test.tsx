@@ -4,10 +4,11 @@ import {
   beforeAll,
   beforeEach,
   expect,
+  spyOn,
   test,
 } from "bun:test";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider } from "@tanstack/react-query";
 import {
   createMemoryHistory,
   createRootRoute,
@@ -15,10 +16,20 @@ import {
   createRouter,
   RouterProvider,
 } from "@tanstack/react-router";
-import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  waitFor,
+  within,
+} from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import type { ComponentType } from "react";
 import { BotRoster } from "@/components/bots/bot-roster";
 import { type AgentProfile, agentKeys } from "@/lib/agents/queries";
 import { deploymentKeys } from "@/lib/deployment/queries";
+import { queryClient } from "@/query-client";
+import { Route as BotsRoute } from "@/routes/_authed/_app/bots.index";
 import { settleReactWork } from "./settle-react-work";
 
 /**
@@ -37,6 +48,8 @@ afterAll(async () => {
 const originalFetch = global.fetch;
 afterEach(() => {
   global.fetch = originalFetch;
+  queryClient.clear();
+  queryClient.setDefaultOptions(originalDefaults);
 });
 
 function bot(overrides: Partial<AgentProfile> & { id: string }): AgentProfile {
@@ -86,20 +99,22 @@ function serving(
   }) as unknown as typeof fetch;
 }
 
-let queryClient: QueryClient;
+const originalDefaults = queryClient.getDefaultOptions();
 beforeEach(() => {
-  queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
+  queryClient.clear();
+  queryClient.setDefaultOptions({
+    queries: { retry: false },
+    mutations: { retry: false },
   });
 });
 
-function draw() {
+function draw(editing = false, Page?: ComponentType) {
   const rootRoute = createRootRoute();
   const routeTree = rootRoute.addChildren([
     createRoute({
       getParentRoute: () => rootRoute,
       path: "/",
-      component: BotRoster,
+      component: () => (Page ? <Page /> : <BotRoster editing={editing} />),
     }),
     createRoute({
       getParentRoute: () => rootRoute,
@@ -275,4 +290,265 @@ test("personal edition labels starter Bots as included with OpenBot", async () =
     view.getByRole("heading", { name: "Included with OpenBot" }),
   ).toBeTruthy();
   expect(view.queryByText("Shared with you")).toBeNull();
+});
+
+test("Edit selects visible and hidden Bots, and delete targets only manageable Bots after confirmation", async () => {
+  serving(
+    [
+      bot({ id: "mine", name: "Mine" }),
+      bot({
+        id: "included",
+        name: "Included",
+        systemOwned: true,
+        canManage: false,
+        mine: false,
+      }),
+    ],
+    [bot({ id: "hidden", name: "Hidden Bot", hidden: true })],
+  );
+  const view = draw(true);
+  expect(
+    await view.findByRole("checkbox", { name: "Select Hidden Bot" }),
+  ).toBeTruthy();
+  fireEvent.click(view.getByRole("button", { name: "Select all" }));
+  expect(view.getByRole("status").textContent).toBe("3 selected");
+  expect(
+    view.getByRole("button", { name: "Delete (2)" }).hasAttribute("disabled"),
+  ).toBe(false);
+  fireEvent.click(view.getByRole("button", { name: "Delete (2)" }));
+  expect(await view.findByRole("dialog")).toBeTruthy();
+  expect(view.getByRole("heading", { name: "Delete 2 Bots?" })).toBeTruthy();
+  expect(view.getByText(/1 other selected Bot cannot be deleted/)).toBeTruthy();
+  fireEvent.click(view.getByRole("button", { name: "Cancel" }));
+  expect(
+    view
+      .getByRole("checkbox", { name: "Select Mine" })
+      .getAttribute("aria-checked"),
+  ).toBe("true");
+});
+
+test("Edit leaves assigned protected Bots unselectable and Select all skips them", async () => {
+  serving(
+    [
+      bot({ id: "mine", name: "Mine" }),
+      bot({
+        id: "assigned",
+        name: "Assigned",
+        assignedToMe: true,
+        canManage: false,
+        mine: false,
+      }),
+    ],
+    [],
+  );
+  const view = draw(true);
+  await view.findByRole("checkbox", { name: "Select Mine" });
+  expect(
+    view
+      .getByRole("checkbox", { name: "Select Assigned" })
+      .getAttribute("aria-disabled"),
+  ).toBe("true");
+  fireEvent.click(view.getByRole("button", { name: "Select all" }));
+  expect(view.getByRole("status").textContent).toBe("1 selected");
+  fireEvent.click(view.getByRole("button", { name: "Deselect all" }));
+  expect(view.getByRole("status").textContent).toBe("0 selected");
+});
+
+test("the header opens Edit, deletion waits for confirmation, and a partial failure retries only the failed Bot", async () => {
+  const visible = [
+    bot({ id: "first", name: "First" }),
+    bot({
+      id: "included",
+      name: "Included",
+      canManage: false,
+      mine: false,
+      systemOwned: true,
+    }),
+  ];
+  const hidden = [bot({ id: "second", name: "Second", hidden: true })];
+  serving(visible, hidden);
+  const reads = global.fetch;
+  const deleted: string[] = [];
+  let release: () => void = () => {};
+  const pending = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let refusedOnce = false;
+  global.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const path = String(input);
+    if (init?.method !== "DELETE") return reads(input, init);
+    const id = path.split("/").at(-1) ?? "";
+    deleted.push(id);
+    await pending;
+    if (id === "second" && !refusedOnce) {
+      refusedOnce = true;
+      return Response.json(
+        { error: "Could not delete this Bot. Try again." },
+        { status: 503 },
+      );
+    }
+    for (const list of [visible, hidden]) {
+      const index = list.findIndex((agent) => agent.id === id);
+      if (index >= 0) list.splice(index, 1);
+    }
+    return new Response(null, { status: 204 });
+  }) as typeof fetch;
+  const search = spyOn(BotsRoute, "useSearch").mockImplementation(
+    (() => ({})) as never,
+  );
+  try {
+    const user = userEvent.setup({ document });
+    const view = draw(false, BotsRoute.options.component as ComponentType);
+    expect(
+      (await view.findByText("First")).closest("a")?.getAttribute("href"),
+    ).toBe("/bots/first");
+    await user.click(view.getByRole("button", { name: "Bots actions" }));
+    await user.click(await view.findByRole("menuitem", { name: "Edit list" }));
+    await view.findByRole("checkbox", { name: "Select Second" });
+    fireEvent.click(view.getByRole("button", { name: "Select all" }));
+    expect(view.getByRole("status").textContent).toBe("3 selected");
+    fireEvent.click(view.getByRole("button", { name: "Delete (2)" }));
+    let dialog = await view.findByRole("dialog");
+    expect(
+      within(dialog)
+        .getAllByRole("listitem")
+        .map((item) => item.textContent),
+    ).toEqual(["First", "Second"]);
+    expect(deleted).toEqual([]);
+    fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(view.queryByRole("dialog")).toBeNull());
+    expect(deleted).toEqual([]);
+    expect(view.getByRole("status").textContent).toBe("3 selected");
+
+    fireEvent.click(view.getByRole("button", { name: "Delete (2)" }));
+    dialog = await view.findByRole("dialog");
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Delete selected" }),
+    );
+    await waitFor(() => expect(deleted).toHaveLength(2));
+    expect(
+      view.getByText("Done").closest("button")?.hasAttribute("disabled"),
+    ).toBe(true);
+    // The modal correctly hides the page from accessibility queries. Inspect these underlying
+    // controls only to prove that the pending operation also disables them outside the modal.
+    expect(
+      view.container
+        .querySelector('[aria-label="Select Included"]')
+        ?.getAttribute("aria-disabled"),
+    ).toBe("true");
+    release();
+    expect((await view.findByRole("alert")).textContent).toContain(
+      "Second: Could not delete this Bot. Try again.",
+    );
+    expect(
+      view.container.querySelector('[aria-label="Select First"]'),
+    ).toBeNull();
+    expect(
+      view.container
+        .querySelector('[aria-label="Select Second"]')
+        ?.getAttribute("aria-checked"),
+    ).toBe("true");
+    expect(
+      view.container
+        .querySelector('[aria-label="Select Included"]')
+        ?.getAttribute("aria-checked"),
+    ).toBe("true");
+    expect(
+      within(dialog).getByRole("heading", { name: "Delete 1 Bot?" }),
+    ).toBeTruthy();
+    expect(
+      within(dialog)
+        .getAllByRole("listitem")
+        .map((item) => item.textContent),
+    ).toEqual(["Second", "Second: Could not delete this Bot. Try again."]);
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Delete selected" }),
+    );
+    await waitFor(() => expect(view.queryByRole("dialog")).toBeNull());
+    expect(deleted).toEqual(["first", "second", "second"]);
+    expect(view.queryByRole("checkbox", { name: "Select Second" })).toBeNull();
+    expect(view.getByRole("status").textContent).toBe("1 selected");
+    fireEvent.click(view.getByRole("button", { name: "Done" }));
+    expect(view.queryByRole("checkbox")).toBeNull();
+    expect(view.getByText("Included").closest("a")?.getAttribute("href")).toBe(
+      "/bots/included",
+    );
+    await user.click(view.getByRole("button", { name: "Bots actions" }));
+    await user.click(await view.findByRole("menuitem", { name: "Edit list" }));
+    expect(view.getByRole("status").textContent).toBe("0 selected");
+  } finally {
+    release();
+    search.mockRestore();
+  }
+});
+
+test("bulk Hide and Unhide use each Bot's existing rules and preserve other selected Bots", async () => {
+  const visible = [
+    bot({
+      id: "included",
+      name: "Included",
+      canManage: false,
+      mine: false,
+      systemOwned: true,
+    }),
+    bot({ id: "assigned", name: "Assigned", assignedToMe: true }),
+    bot({
+      id: "protected",
+      name: "Protected",
+      canManage: false,
+      mine: false,
+      assignedToMe: true,
+    }),
+  ];
+  const hidden = [bot({ id: "hidden", name: "Hidden Bot", hidden: true })];
+  serving(visible, hidden);
+  const reads = global.fetch;
+  const writes: string[] = [];
+  global.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const path = String(input);
+    if (init?.method !== "POST") return reads(input, init);
+    writes.push(path);
+    const [, , , id, action] = path.split("/");
+    const source = action === "hide" ? visible : hidden;
+    const destination = action === "hide" ? hidden : visible;
+    const index = source.findIndex((agent) => agent.id === id);
+    if (index < 0)
+      return Response.json({ error: "Unknown Bot" }, { status: 404 });
+    const [agent] = source.splice(index, 1);
+    destination.push({ ...agent, hidden: action === "hide" });
+    return new Response(null, { status: 204 });
+  }) as typeof fetch;
+  const view = draw(true);
+  await view.findByRole("checkbox", { name: "Select Hidden Bot" });
+  fireEvent.click(view.getByRole("button", { name: "Select all" }));
+  expect(view.getByRole("status").textContent).toBe("3 selected");
+  fireEvent.click(view.getByRole("button", { name: "Hide (1)" }));
+  await waitFor(() =>
+    expect(view.getByRole("status").textContent).toBe("2 selected"),
+  );
+  expect(
+    view
+      .getByRole("checkbox", { name: "Select Included" })
+      .getAttribute("aria-checked"),
+  ).toBe("false");
+  fireEvent.click(view.getByRole("button", { name: "Unhide (1)" }));
+  await waitFor(() =>
+    expect(view.getByRole("status").textContent).toBe("1 selected"),
+  );
+  expect(writes).toEqual([
+    "/api/agents/included/hide",
+    "/api/agents/hidden/unhide",
+  ]);
+  expect(
+    view
+      .getByRole("checkbox", { name: "Select Assigned" })
+      .getAttribute("aria-checked"),
+  ).toBe("true");
+  expect(
+    view
+      .getByRole("checkbox", { name: "Select Hidden Bot" })
+      .getAttribute("aria-checked"),
+  ).toBe("false");
+  expect(view.queryByRole("button", { name: /^Hide \(/ })).toBeNull();
+  expect(view.queryByRole("button", { name: /^Unhide \(/ })).toBeNull();
 });

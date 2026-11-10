@@ -4,6 +4,7 @@ import { Link, type LinkOptions, useParams } from "@tanstack/react-router";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import type * as React from "react";
 import { useRef, useState } from "react";
+import { UsageMonitor } from "@/components/service-usage/usage-monitor";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -363,6 +364,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             ))}
           {/* Your own browser, with the Recorder in it. Drawn only where OpenBot can run one for you. */}
           <BrowserNavItem />
+          <UsageMonitor />
           <SidebarMenuItem>
             <DropdownMenu>
               <DropdownMenuTrigger

@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { SETTINGS_SIDEBAR_ITEMS } from "../src/components/settings/settings-sidebar";
+import {
+  SETTINGS_SIDEBAR_ITEMS,
+  settingsSidebarItems,
+} from "../src/components/settings/settings-sidebar";
 
 describe("settings sidebar", () => {
   test("Browsers links to /settings/browsers, right after Approvals", () => {
@@ -17,4 +20,18 @@ describe("settings sidebar", () => {
     expect(learning?.linkOptions).toEqual({ to: "/settings/learning" });
     expect(titles.indexOf("Learning")).toBe(titles.indexOf("Browsers") + 1);
   });
+});
+
+test("computer controls have one destination under Computers", () => {
+  expect(
+    SETTINGS_SIDEBAR_ITEMS.some(
+      (item) =>
+        item.title === "This computer" ||
+        item.linkOptions.to === "/settings/this-computer",
+    ),
+  ).toBe(false);
+  expect(
+    settingsSidebarItems("personal").find((item) => item.title === "Computers")
+      ?.linkOptions,
+  ).toEqual({ to: "/computers" });
 });

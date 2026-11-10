@@ -35,6 +35,7 @@ const validInput: CreateAgentInput = {
 function profile(overrides: Partial<AgentProfile> = {}): AgentProfile {
   return {
     id: "agent-1",
+    computerId: null,
     name: validInput.name,
     title: validInput.title,
     roleDescription: validInput.roleDescription,
@@ -346,6 +347,43 @@ describe("agent lifecycle routes", () => {
     ]);
   });
 
+  test("only the owner of a private native coding Bot can edit its coding defaults", async () => {
+    const workspaceBot = {
+      workspaceId: "obw-0123456789abcdef",
+      runtime: "codex" as const,
+      model: null,
+      effort: null,
+      speed: null,
+      permission: "workspace-write" as const,
+    };
+    const store = fakeStore({
+      async list() {
+        return [
+          profile({ workspaceBot }),
+          profile({ workspaceBot, ownerUserId: "user-2" }),
+          profile({ workspaceBot, systemOwned: true }),
+          profile({ workspaceBot, personalStarter: true }),
+          profile({ workspaceBot, visibility: "public" }),
+          profile({ workspaceBot, endpoint: "https://external.example/agent" }),
+          profile(),
+        ];
+      },
+    });
+    const response = await appFor(store).request("http://openbot.test/");
+    const body = (await json(response)) as {
+      agents: { canEditCodingDefaults: boolean }[];
+    };
+    expect(body.agents.map((agent) => agent.canEditCodingDefaults)).toEqual([
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+    ]);
+  });
+
   test("projects exact DTO fields and computes permissions for the authenticated actor", async () => {
     const store = fakeStore({
       async list() {
@@ -368,6 +406,9 @@ describe("agent lifecycle routes", () => {
       agents: [
         {
           id: "agent-1",
+          computerId: null,
+          canAssignComputer: true,
+          canEditCodingDefaults: false,
           name: validInput.name,
           title: validInput.title,
           roleDescription: validInput.roleDescription,
@@ -391,6 +432,9 @@ describe("agent lifecycle routes", () => {
         },
         {
           id: "agent-2",
+          computerId: null,
+          canAssignComputer: false,
+          canEditCodingDefaults: false,
           name: validInput.name,
           title: validInput.title,
           roleDescription: validInput.roleDescription,
@@ -414,6 +458,9 @@ describe("agent lifecycle routes", () => {
         },
         {
           id: "system-agent",
+          computerId: null,
+          canAssignComputer: false,
+          canEditCodingDefaults: false,
           name: validInput.name,
           title: validInput.title,
           roleDescription: validInput.roleDescription,

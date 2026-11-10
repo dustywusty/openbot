@@ -1,7 +1,11 @@
 import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
 import type { ReactNode } from "react";
+import { ChatWidthAccountSync } from "@/components/settings/chat-width-preference";
+import { synchronizeComputerOwner } from "@/lib/computers/account-lifecycle";
+import { ComputerAccountSync } from "@/lib/computers/account-sync";
 import { BotLookProvider } from "../components/agents/bot-look";
 import { TeamFeaturesDialog } from "../components/edition/team-features-dialog";
+import { ProfileNameGate } from "../components/settings/profile-name-gate";
 import { currentUserQueryOptions, needsOnboarding } from "../lib/auth/queries";
 import { CopilotProvider } from "../lib/copilot/provider";
 import { AppHotkeys } from "../lib/hotkeys/app-hotkeys";
@@ -13,6 +17,7 @@ export const Route = createFileRoute("/_authed")({
     const user = await context.queryClient.ensureQueryData(
       currentUserQueryOptions(),
     );
+    await synchronizeComputerOwner(context.queryClient, user?.id ?? null);
     if (!user) {
       throw redirect({ to: "/sign" });
     }
@@ -32,10 +37,14 @@ export const Route = createFileRoute("/_authed")({
       <AppHotkeys />
       {/* The skin saved on the account, drawn over the browser's cached one once it loads. */}
       <SkinAccountSync />
+      <ChatWidthAccountSync />
+      <ComputerAccountSync />
       {/* Opened by the personal edition's "OpenBot for Business" entry, from whichever skin draws it. */}
       <TeamFeaturesDialog />
       <SkinBotLook>
-        <Outlet />
+        <ProfileNameGate>
+          <Outlet />
+        </ProfileNameGate>
       </SkinBotLook>
     </CopilotProvider>
   ),

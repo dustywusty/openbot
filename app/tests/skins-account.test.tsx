@@ -21,7 +21,6 @@ import { act, cleanup, render, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { signOutMutationOptions } from "@/lib/auth/mutations";
 import { authKeys } from "@/lib/auth/queries";
-import { appConfig } from "@/lib/generated/application-config";
 import { userPreferencesQueryOptions } from "@/lib/settings/message-list";
 import { queryClient } from "@/query-client";
 import { Route as AppRoute } from "@/routes/_authed/_app";
@@ -76,6 +75,7 @@ function preferences(skin: UserPreferences["skin"]): UserPreferences {
     selfHostBannerDismissed: true,
     narration: null,
     skin,
+    chatWidth: "comfortable",
     proactive: "on",
   };
 }
@@ -162,8 +162,8 @@ test("picking a skin draws it at once and saves it on the account", async () => 
 
   const picker = view.getByRole("combobox", { name: "Skin" });
   await waitFor(() => expect(picker.getAttribute("data-disabled")).toBeNull());
-  // The default skin goes by the product's own name, whatever brand.yaml calls it.
-  expect(picker.textContent).toContain(appConfig.brand.productName);
+  // The appearance's name is separate from the product's name.
+  expect(picker.textContent).toContain("CopilotKit");
 
   await user.click(picker);
   const option = await view.findByRole("option", { name: /^OpenDots/ });

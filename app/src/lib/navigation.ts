@@ -3,6 +3,7 @@ import {
   IconBolt,
   IconBox,
   IconClock,
+  IconDeviceDesktop,
   IconPlug,
   IconSettings,
   IconShieldLock,
@@ -33,6 +34,7 @@ export type NavigationItem =
       kind?: undefined;
       id:
         | "bots"
+        | "computers"
         | "routines"
         | "capabilities"
         | "connections"
@@ -41,6 +43,7 @@ export type NavigationItem =
       label: string;
       to:
         | "/bots"
+        | "/computers"
         | "/routines"
         | "/capabilities"
         | "/connections"
@@ -88,6 +91,20 @@ export const NAVIGATION: readonly NavigationItem[] = [
     section: "primary",
   },
   {
+    id: "computers",
+    label: "Computers",
+    to: "/computers",
+    icon: IconDeviceDesktop,
+    section: "primary",
+  },
+  {
+    id: "connections",
+    label: "Connections",
+    to: "/connections",
+    icon: IconPlug,
+    section: "primary",
+  },
+  {
     id: "routines",
     label: "Routines",
     to: "/routines",
@@ -99,13 +116,6 @@ export const NAVIGATION: readonly NavigationItem[] = [
     label: "Capabilities",
     to: "/capabilities",
     icon: IconBox,
-    section: "primary",
-  },
-  {
-    id: "connections",
-    label: "Connections",
-    to: "/connections",
-    icon: IconPlug,
     section: "primary",
   },
   {

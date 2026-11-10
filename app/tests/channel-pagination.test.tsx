@@ -171,6 +171,7 @@ function renderSidebar() {
     selfHostBannerDismissed: false,
     narration: null,
     skin: "openbot",
+    chatWidth: "comfortable",
     proactive: "on",
   });
   queryClient.setQueryData(authKeys.currentUser(), {
@@ -244,6 +245,7 @@ test("message emphasis updates mounted rows from the account preferences cache",
       selfHostBannerDismissed: false,
       narration: null,
       skin: "openbot",
+      chatWidth: "comfortable",
       proactive: "on",
     }),
   );

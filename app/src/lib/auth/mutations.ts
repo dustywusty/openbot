@@ -1,5 +1,6 @@
 import { mutationOptions, type QueryClient } from "@tanstack/react-query";
 import { client } from "@/lib/client";
+import { synchronizeComputerOwner } from "@/lib/computers/account-lifecycle";
 import { clearSkin } from "@/skins/store";
 import { authKeys } from "./queries";
 
@@ -23,6 +24,7 @@ export function signOutMutationOptions(queryClient: QueryClient) {
     mutationFn: signOut,
     onSuccess: () => {
       clearSkin();
+      void synchronizeComputerOwner(queryClient, null);
       queryClient.removeQueries({ queryKey: authKeys.all });
     },
   });

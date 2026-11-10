@@ -1,15 +1,9 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useEffect, useRef, useState } from "react";
-import {
-  journey,
-  type Leg,
-  leftSaid,
-  type Plan,
-  position,
-  steadyLeft,
-} from "./journey";
-import { formatElapsed, type Progress, SetupProgress } from "./SetupProgress";
+import { journey, type Leg, type Plan, position, steadyLeft } from "./journey";
+import { LifecycleProgress } from "./LifecycleProgress";
+import { type Progress, SetupProgress } from "./SetupProgress";
 
 /**
  * The Shutting down screen's rows, as `quit:progress` carries them: the whole list each time, with
@@ -152,39 +146,32 @@ function QuitJourney({ steps }: { steps: readonly Progress[] }) {
   clock.current = ticked.clock;
   const elapsed = Math.floor((now - ticked.clock.began) / 1000);
   return (
-    <section className="journey" aria-label="How far along">
-      <div className="journey-head">
-        <span className="step-spinner" aria-hidden="true" />
-        <span className="journey-said">{ticked.said}</span>
-        <span className="journey-time">
-          {leftSaid(ticked.left)}
-          <span aria-hidden="true">
-            {" · "}
-            {formatElapsed(elapsed)} so far
-          </span>
-        </span>
-      </div>
-      <progress
-        aria-label="How far along"
-        aria-valuetext={`${Math.round(ticked.fraction * 100)}%, ${leftSaid(ticked.left)}`}
-        value={ticked.fraction}
-        max={1}
-      />
-    </section>
+    <LifecycleProgress
+      said={ticked.said}
+      fraction={ticked.fraction}
+      left={ticked.left}
+      elapsed={elapsed}
+      details={
+        <SetupProgress
+          steps={[...steps]}
+          label="Shutdown progress"
+          showElapsed={false}
+        />
+      }
+    />
   );
 }
 
 /**
- * What the person sees between choosing Quit and the app closing. Nothing to press. While it runs,
- * the same journey a Start shows: what it is doing, one bar, and the time left. On Windows D it
- * showed only "Stopping OpenBot · In progress · 12s elapsed".
+ * What the person sees between choosing Quit and the app closing. Start and Quit share one active
+ * status and bar, with step history under Details. Failures stay visible without a disclosure.
  */
 export function ShuttingDown({ status }: { status: QuitStatus | null }) {
   const steps = status?.steps ?? [];
   const failed = steps.some((step) => !step.ok);
   const running = !failed && steps.some((step) => step.running);
   return (
-    <main>
+    <main className="lifecycle">
       <div className="sheet connection-sheet">
         <h1>Shutting down OpenBot</h1>
         <p className="lede" role="status">
@@ -192,12 +179,11 @@ export function ShuttingDown({ status }: { status: QuitStatus | null }) {
             ? "Part of it could not be stopped. OpenBot says what happened the next time it opens."
             : "OpenBot is stopping what it started on this computer, then it closes."}
         </p>
-        {running && <QuitJourney steps={steps} />}
-        <SetupProgress
-          steps={steps}
-          label="Shutdown progress"
-          showElapsed={!running}
-        />
+        {running ? (
+          <QuitJourney steps={steps} />
+        ) : (
+          <SetupProgress steps={steps} label="Shutdown progress" />
+        )}
       </div>
     </main>
   );

@@ -1,3 +1,7 @@
+import {
+  parseWorkspaceBot,
+  type WorkspaceBot,
+} from "@openbot/shared/workspace-bot";
 import type { Message, RunAgentInput } from "@ag-ui/client";
 import { type AbstractAgent, HttpAgent } from "@ag-ui/client";
 import type {
@@ -215,7 +219,17 @@ type RegisteredUnavailableAgent = {
   reason: string;
 };
 
+export type RegisteredDesktopAgent = {
+  id: string;
+  name: string;
+  type: "desktop_harness";
+  systemPrompt: string;
+  workspaceBot: WorkspaceBot;
+  transport?: (instructions: string) => AbstractAgent;
+};
+
 export type RegisteredAgent =
+  | RegisteredDesktopAgent
   | RegisteredBuiltInAgent
   | RegisteredRemoteAgent
   | RegisteredUnavailableAgent;
@@ -366,6 +380,13 @@ const BROUGHT_BOT_GUIDANCE = `\n\n${workingGuidance({
  * A built-in Bot, or one OpenBot cannot run at all, is returned as it is.
  */
 export function onOpenBotRunner(agent: RegisteredAgent): RegisteredAgent {
+  if (agent.type === "desktop_harness")
+    return {
+      id: agent.id,
+      name: agent.name,
+      type: "built_in",
+      systemPrompt: agent.systemPrompt,
+    };
   if (agent.type !== "remote_ag_ui" && agent.type !== "remote_mastra")
     return agent;
   return {
@@ -408,7 +429,9 @@ function answersOwnRunsHere(
 ): boolean {
   return (
     !!holdsTools &&
-    (agent.type === "remote_ag_ui" || agent.type === "remote_mastra") &&
+    (agent.type === "desktop_harness" ||
+      agent.type === "remote_ag_ui" ||
+      agent.type === "remote_mastra") &&
     !runByThisDeployment(agent)
   );
 }
@@ -544,6 +567,23 @@ export function registeredAgentFromRow(
     return null;
   }
   const configuration = row.configuration;
+  if (configuration.workspaceBot) {
+    if (row.type !== "built_in") return null;
+    try {
+      return {
+        id: row.id,
+        name: row.name,
+        type: "desktop_harness",
+        systemPrompt:
+          typeof configuration.systemPrompt === "string"
+            ? configuration.systemPrompt
+            : row.roleDescription,
+        workspaceBot: parseWorkspaceBot(configuration.workspaceBot),
+      };
+    } catch {
+      return null;
+    }
+  }
   if (row.type === "built_in") {
     const systemPrompt = configuration?.systemPrompt;
     const trimmedSystemPrompt =
@@ -1021,7 +1061,11 @@ export async function buildAgents(
    * distinguish a failed read from a person who has written no instructions.
    */
   let instructions: string | null = null;
-  if (agents.some((agent) => agent.type === "built_in")) {
+  if (
+    agents.some(
+      (agent) => agent.type === "built_in" || agent.type === "desktop_harness",
+    )
+  ) {
     try {
       instructions = (await loadInstructions?.()) ?? null;
     } catch {
@@ -1341,6 +1385,32 @@ async function buildAgent(
 ): Promise<AbstractAgent> {
   if (agent.type === "unavailable") {
     return new UnavailableAgent(agent);
+  }
+  if (agent.type === "desktop_harness") {
+    const native = agent.transport?.(
+      [agent.systemPrompt, standingInstructions].filter(Boolean).join("\n\n"),
+    );
+    if (!native)
+      return new UnavailableAgent({
+        id: agent.id,
+        name: agent.name,
+        reason: "Open OpenBot Desktop and connect this Bot's VM.",
+      });
+    // Internal title/check-in runs must not start a coding task or touch the guest.
+    return new RunBuiltAgent(
+      { agentId: agent.id, description: agent.name },
+      native,
+      async (input) =>
+        holdsTools && !holdsTools(input)
+          ? buildAgent(
+              onOpenBotRunner(agent),
+              model,
+              apiKey,
+              stallGuard,
+              async () => [],
+            )
+          : native,
+    );
   }
 
   // Whether anybody is watching this run: a routine or a check-in is told it runs unattended.

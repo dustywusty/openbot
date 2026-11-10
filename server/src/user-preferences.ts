@@ -1,5 +1,6 @@
 import {
   DEFAULT_USER_PREFERENCES,
+  isChatWidth,
   isSkinId,
   type UserPreferences,
 } from "@openbot/shared/user-preferences";
@@ -13,9 +14,15 @@ import { users } from "./db/schema";
  */
 function withDefaults(stored: Partial<UserPreferences>): UserPreferences {
   const preferences = { ...DEFAULT_USER_PREFERENCES, ...stored };
-  return isSkinId(preferences.skin)
-    ? preferences
-    : { ...preferences, skin: DEFAULT_USER_PREFERENCES.skin };
+  return {
+    ...preferences,
+    skin: isSkinId(preferences.skin)
+      ? preferences.skin
+      : DEFAULT_USER_PREFERENCES.skin,
+    chatWidth: isChatWidth(preferences.chatWidth)
+      ? preferences.chatWidth
+      : DEFAULT_USER_PREFERENCES.chatWidth,
+  };
 }
 
 export type UserPreferencesStore = {

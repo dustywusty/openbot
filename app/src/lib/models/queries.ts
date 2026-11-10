@@ -21,6 +21,8 @@ export type ModelOption = {
   efforts?: string[];
   /** The effort the model uses when none is sent, when its provider says. Absent when unknown. */
   defaultEffort?: string;
+  /** Native coding harness service tiers supported by this model. */
+  speeds?: ("standard" | "fast")[];
 };
 
 /**

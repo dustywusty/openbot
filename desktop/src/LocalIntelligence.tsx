@@ -870,8 +870,7 @@ export function LocalIntelligence({
   open?: readonly Progress[];
 }) {
   const { at, running, stopped, problem } = sequence;
-  // While it runs, one journey says what is happening and how far along the whole Start is. The
-  // rows then say which part is done and which is left, and nothing twice.
+  // One active status covers Start. The step history is available through Details.
   const journeying = offerStart && running && !stopped;
   // Its download's bar is the journey's too: the running row keeps only what is particular to it.
   const releasing = open.some((row) => row.step === "release" && row.running);
@@ -889,15 +888,17 @@ export function LocalIntelligence({
 
   return (
     <section aria-label="OpenBot on this computer">
-      {journeying && (
+      {journeying ? (
         <StartJourney
           sequence={sequence}
           open={open}
           now={handOff}
           releaseDue={releaseDue}
+          details={<SetupProgress steps={rows} showElapsed={false} />}
         />
+      ) : (
+        <SetupProgress steps={rows} />
       )}
-      <SetupProgress steps={rows} showElapsed={!journeying} />
       {handOff && !journeying && <StatusLine>{handOff}</StatusLine>}
       <LocalNeeds sequence={sequence} />
       {stopped && problem && <Failure problem={problem} />}

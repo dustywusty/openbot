@@ -1,3 +1,9 @@
+export const CHAT_WIDTHS = ["comfortable", "wide", "full"] as const;
+export type ChatWidth = (typeof CHAT_WIDTHS)[number];
+export function isChatWidth(value: unknown): value is ChatWidth {
+  return CHAT_WIDTHS.some((width) => width === value);
+}
+
 export type MessageListEmphasis = "agent" | "thread";
 
 export type NarrationPreference = "on" | "off";
@@ -26,6 +32,7 @@ export function isSkinId(value: unknown): value is SkinId {
 }
 
 export type UserPreferences = {
+  chatWidth: ChatWidth;
   /** Server-owned first new eligible conversation; shared by both starter Bots. */
   starterTourChannelId?: string;
   /** Set by profile saves so choosing a name finishes the first-run prompt. */
@@ -50,6 +57,7 @@ export type UserPreferences = {
 };
 
 export const DEFAULT_USER_PREFERENCES: UserPreferences = {
+  chatWidth: "comfortable",
   messageListEmphasis: "thread",
   selfHostBannerDismissed: false,
   narration: null,

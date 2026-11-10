@@ -122,6 +122,7 @@ function renderNarrowApp(start = "/channel/models") {
     selfHostBannerDismissed: true,
     narration: null,
     skin: "openbot",
+    chatWidth: "comfortable",
     proactive: "on",
   });
   queryClient.setQueryData(agentKeys.list(false), []);

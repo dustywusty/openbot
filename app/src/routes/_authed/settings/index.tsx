@@ -7,6 +7,7 @@ import {
   PageShell,
 } from "@/components/layout/page-shell";
 import { AiModelSection } from "@/components/settings/ai-connection";
+import { ChatWidthPreference } from "@/components/settings/chat-width-preference";
 import { MessageListPreference } from "@/components/settings/message-list-preference";
 import { NameRow } from "@/components/settings/profile";
 import { StandingInstructionsRow } from "@/components/settings/standing-instructions";
@@ -82,6 +83,8 @@ function RouteComponent() {
           </Item>
           <Separator />
           <SkinPicker />
+          <Separator />
+          <ChatWidthPreference />
         </PageRows>
         <MessageListPreference />
       </PageSection>

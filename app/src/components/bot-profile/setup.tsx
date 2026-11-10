@@ -13,6 +13,8 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { Fragment, useState } from "react";
 import type { ZodType } from "zod";
 import { CallbackTokenPanel } from "@/components/agents/callback-token-panel";
+import { BotComputerAssignment } from "@/components/bot-profile/computer-assignment";
+import { CodingDefaultsSection } from "@/components/bot-profile/coding-defaults";
 import { BusinessComputerLink } from "@/components/edition/team-features-dialog";
 import { PageRows, PageSection } from "@/components/layout/page-shell";
 import { Button } from "@/components/ui/button";
@@ -192,6 +194,10 @@ export function SetupSections({ agent }: { agent: AgentProfile }) {
           ) : null}
         </PageRows>
       </PageSection>
+      <CodingDefaultsSection agent={agent} />
+      {agent.canAssignComputer || agent.computerId || agent.workspaceBot ? (
+        <BotComputerAssignment agent={agent} />
+      ) : null}
       <ConnectionSection agent={agent} />
       {open ? (
         <EditTextDialog
@@ -487,15 +493,25 @@ function ConnectionSection({ agent }: { agent: AgentProfile }) {
             <IconPlugConnected />
           </ItemMedia>
           <ItemContent>
-            <ItemTitle>{builtIn ? "Built in" : "Agent URL"}</ItemTitle>
+            <ItemTitle>
+              {agent.workspaceBot
+                ? `${agent.workspaceBot.runtime === "codex" ? "Codex" : "Claude Code"} in VM`
+                : builtIn
+                  ? "Built in"
+                  : "Agent URL"}
+            </ItemTitle>
             <ItemDescription
               className={
                 builtIn ? undefined : "line-clamp-none break-all font-mono"
               }
             >
-              {builtIn
-                ? "Runs inside OpenBot. There's nothing to connect."
-                : agent.endpoint}
+              {agent.workspaceBot
+                ? "The coding harness runs inside its assigned project VM."
+                : builtIn
+                  ? agent.computerId
+                    ? "Runs inside OpenBot. File and command tools use its project VM."
+                    : "Runs inside OpenBot. There's nothing to connect."
+                  : agent.endpoint}
             </ItemDescription>
           </ItemContent>
         </Item>

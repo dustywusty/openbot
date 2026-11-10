@@ -35,9 +35,9 @@ export function applySidebarOpen(open: boolean, effects: SidebarEffects) {
 /**
  * Each shell's sidebar width, remembered across reloads, under this prefix and the shell's name.
  *
- * Dragged on the sidebar's edge (`SidebarRail`). Never narrower than what its own footer needs, which
- * the rail measures as the drag starts, nor than `SIDEBAR_MIN_WIDTH`; never wider than
- * `SIDEBAR_MAX_WIDTH`, past which a roster stops being a column beside the work and becomes the work.
+ * Dragged on the sidebar's edge (`SidebarRail`), between `SIDEBAR_MIN_WIDTH` and
+ * `SIDEBAR_MAX_WIDTH`. Footer labels truncate within this range. Their full text and stretched
+ * account row must not raise the minimum each time the sidebar is widened.
  */
 export const SIDEBAR_WIDTH_STORAGE_PREFIX = "openbot-sidebar-width:";
 export const SIDEBAR_MIN_WIDTH = 220;

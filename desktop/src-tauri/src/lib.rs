@@ -3,7 +3,10 @@ pub mod acquire;
 pub mod ai_connection;
 pub mod app_update;
 pub mod cli_release;
+// The legacy host-CLI usage probe is intentionally not part of the native application.
 pub mod composio;
+pub mod computer_auth;
+pub mod computer_pairing;
 pub mod deployment;
 pub mod deployment_release;
 pub mod docker_config;
@@ -28,6 +31,7 @@ pub mod preparation;
 pub mod problem;
 pub mod provider;
 pub mod provider_oauth;
+pub mod provider_usage;
 pub mod pull_metrics;
 pub mod quiet;
 pub mod recorder_external;

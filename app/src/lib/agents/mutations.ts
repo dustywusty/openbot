@@ -1,4 +1,5 @@
 import { mutationOptions, type QueryClient } from "@tanstack/react-query";
+import type { WorkspaceBot } from "@openbot/shared/workspace-bot";
 import { channelKeys } from "@/lib/channels/queries";
 import { client } from "@/lib/client";
 import {
@@ -9,6 +10,7 @@ import {
 } from "./queries";
 
 export type AgentInput = {
+  workspaceBot?: WorkspaceBot | null;
   name: string;
   title: string;
   roleDescription: string;
@@ -178,6 +180,50 @@ export function setHandoffGrantMutationOptions(queryClient: QueryClient) {
         `/api/plugins/grants?kind=bot&ref=${encodeURIComponent(variables.ref)}&agentId=${encodeURIComponent(variables.agentId)}`,
         { method: "DELETE", fallback: FALLBACK },
       );
+    },
+    onSuccess: () => invalidateAgents(queryClient),
+  });
+}
+
+export type BatchAgentAction = "delete" | "hide" | "unhide";
+export type BatchAgentResult = {
+  completedIds: string[];
+  failures: { id: string; message: string }[];
+};
+
+/** One user action, with bounded requests and an explicit result for each Bot. */
+export function batchAgentsMutationOptions(queryClient: QueryClient) {
+  return mutationOptions({
+    mutationFn: async (variables: {
+      action: BatchAgentAction;
+      agentIds: string[];
+    }): Promise<BatchAgentResult> => {
+      const remaining = [...new Set(variables.agentIds)];
+      const result: BatchAgentResult = { completedIds: [], failures: [] };
+      await Promise.all(
+        Array.from({ length: Math.min(4, remaining.length) }, async () => {
+          while (remaining.length) {
+            const id = remaining.shift();
+            if (!id) continue;
+            try {
+              await client(
+                `${agentApiPath(id)}${variables.action === "delete" ? "" : `/${variables.action}`}`,
+                {
+                  method: variables.action === "delete" ? "DELETE" : "POST",
+                  fallback: FALLBACK,
+                },
+              );
+              result.completedIds.push(id);
+            } catch (error) {
+              result.failures.push({
+                id,
+                message: error instanceof Error ? error.message : FALLBACK,
+              });
+            }
+          }
+        }),
+      );
+      return result;
     },
     onSuccess: () => invalidateAgents(queryClient),
   });

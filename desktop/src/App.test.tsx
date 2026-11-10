@@ -9,7 +9,14 @@ import {
 } from "bun:test";
 import { readFileSync } from "node:fs";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
-import { act, cleanup, render, waitFor, within } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { StrictMode } from "react";
 
@@ -233,7 +240,20 @@ function expectWorking(view: ReturnType<typeof render>, said: string) {
   expect(status?.querySelector(".step-spinner")).not.toBeNull();
 }
 
+/** History assertions explicitly reveal the checklist; default presentation is tested separately. */
+function openLifecycleDetails(view: ReturnType<typeof render>) {
+  const details = view.container.querySelector<HTMLDetailsElement>(
+    "details.lifecycle-details",
+  );
+  if (details && !details.open) {
+    fireEvent.click(
+      within(details).getByText("Details", { selector: "summary" }),
+    );
+  }
+}
+
 function rowStatus(view: ReturnType<typeof render>, name: string) {
+  openLifecycleDetails(view);
   return within(view.getByRole("listitem", { name }));
 }
 
@@ -1763,6 +1783,16 @@ test("Continue during setup shows Finishing setup, which starts and opens OpenBo
   await chooseOpenAi(view);
   await view.findByRole("heading", { name: "Finishing setup" });
   expect(stepLabel(view)).toBe("Start");
+  const details = view.container.querySelector<HTMLDetailsElement>(
+    "details.lifecycle-details",
+  );
+  expect(details).not.toBeNull();
+  expect(details?.open).toBe(false);
+  expect(view.getAllByRole("progressbar")).toHaveLength(1);
+  await userEvent.click(
+    within(details!).getByText("Details", { selector: "summary" }),
+  );
+  expect(details?.open).toBe(true);
   const row = view.getByRole("listitem", { name: "Setting up OpenBot" });
   expect(row.textContent).toContain("Step 1 of 4");
   expectPlain(view);
@@ -1967,6 +1997,9 @@ test("while a CLI step runs only Cancel is offered, and Cancel stops the call an
   await installLocal(view);
   await chooseOpenAi(view);
   await view.findByRole("heading", { name: "Finishing setup" });
+  expect(
+    view.container.querySelector("main")?.classList.contains("lifecycle"),
+  ).toBe(true);
   expect(buttons(view)).toEqual(["Cancel"]);
   expect(view.queryByText("Installation options")).toBeNull();
   await userEvent.click(view.getByRole("button", { name: "Cancel" }));
@@ -1978,6 +2011,7 @@ test("while a CLI step runs only Cancel is offered, and Cancel stops the call an
   ).toEqual({
     attempt: (setup?.args as { attempt: string } | undefined)?.attempt,
   });
+  openLifecycleDetails(view);
   const row = view.getByRole("listitem", { name: "Setting up OpenBot" });
   await waitFor(() =>
     expect(row.textContent).toContain(
@@ -1985,9 +2019,15 @@ test("while a CLI step runs only Cancel is offered, and Cancel stops the call an
     ),
   );
   // Once nothing runs, leaving is offered.
+  expect(
+    view.container.querySelector("main")?.classList.contains("lifecycle"),
+  ).toBe(true);
   expect(buttons(view)).toEqual(["Back", "Retry"]);
   await userEvent.click(view.getByRole("button", { name: "Back" }));
   await view.findByRole("heading", { name: "Connect your AI" });
+  expect(
+    view.container.querySelector("main")?.classList.contains("lifecycle"),
+  ).toBe(false);
   expect(
     invokeCalls.filter((call) => call.command === "set_up_local_eval"),
   ).toHaveLength(1);
@@ -2024,6 +2064,7 @@ test("a blocked setup stops at its row in plain words and Retry resumes there", 
   await view.findByRole("heading", { name: "Finishing setup" });
   // Continue does not retry a blocked step: Retry does.
   expect(setups).toBe(1);
+  openLifecycleDetails(view);
   const row = view.getByRole("listitem", { name: "Setting up OpenBot" });
   expect(row.textContent).toContain(
     "The software OpenBot runs on isn't running. Retry to start it.",
@@ -2191,6 +2232,16 @@ test("Quit shows Shutting down with each part's row as it starts and ends", asyn
   await emitQuit({ seq: 2, steps: [running("stop-openbot")] });
   const heading = view.getByRole("heading", { name: "Shutting down OpenBot" });
   expectStandardSheet(heading);
+  const details = view.container.querySelector<HTMLDetailsElement>(
+    "details.lifecycle-details",
+  );
+  expect(details).not.toBeNull();
+  expect(details?.open).toBe(false);
+  expect(view.getAllByRole("progressbar")).toHaveLength(1);
+  await userEvent.click(
+    within(details!).getByText("Details", { selector: "summary" }),
+  );
+  expect(details?.open).toBe(true);
   expect(
     rowStatus(view, "Stopping OpenBot").getByText("In progress"),
   ).toBeTruthy();
@@ -2228,6 +2279,23 @@ test("Quit shows Shutting down with each part's row as it starts and ends", asyn
   );
   // The window only shows; it never asks anything of the native side while it quits.
   expect(invokeCalls.slice(callsBefore)).toEqual([]);
+});
+
+test("a shutdown failure is visible without opening Details", async () => {
+  setupConnectedLocalStack(
+    "/tmp/local-eval-quit-visible-failure",
+    localStatus("ready", "valid"),
+  );
+  const view = await renderApp();
+  await view.findByRole("heading", { name: "OpenBot is running" });
+  await emitQuit({ seq: 2, steps: [failed("stop-openbot")] });
+  const failure = view.getByRole("listitem", { name: "Stopping OpenBot" });
+  expect(within(failure).getByText("Failed")).toBeTruthy();
+  const details = failure.closest("details");
+  expect(details === null || details.open).toBe(true);
+  expect(view.getByRole("status").textContent).toContain(
+    "could not be stopped",
+  );
 });
 
 test("a window sent to the Shutting down page catches up, then follows the rows", async () => {
@@ -2452,6 +2520,7 @@ test("relaunch with Docker Desktop quit opens it, says so, and starts once it an
   await view.findByRole("heading", { name: "Starting OpenBot" });
   await emitDockerHandOff();
   expectJourney(view, DOCKER_HAND_OFF);
+  openLifecycleDetails(view);
   const row = view.getByRole("listitem", { name: "Getting OpenBot ready" });
   expect(row.textContent).toContain("Step 3 of 4");
   expect(localSequence()).toEqual([]);

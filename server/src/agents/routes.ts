@@ -1,4 +1,8 @@
 import { declaredHarness } from "@openbot/shared/harnesses";
+import {
+  parseWorkspaceBot,
+  type WorkspaceBot,
+} from "@openbot/shared/workspace-bot";
 import type { Context, MiddlewareHandler } from "hono";
 import { Hono } from "hono";
 import type { AuditEventType, AuditStore } from "../audit";
@@ -41,6 +45,8 @@ type AgentInputObject = {
   isolated?: unknown;
   instructions?: unknown;
   harness?: unknown;
+  workspaceBot?: unknown;
+  computerId?: unknown;
 };
 
 /**
@@ -157,6 +163,53 @@ export function parseAgentInput(
     if (endpoint) harness = named.id;
   }
 
+  let workspaceBot: WorkspaceBot | null | undefined;
+  let computerId: string | null | undefined;
+  if (input.computerId !== undefined) {
+    if (input.computerId === null) computerId = null;
+    else if (
+      typeof input.computerId !== "string" ||
+      !/^obw-[a-f0-9]{16}$/.test(input.computerId)
+    )
+      return { ok: false, error: "Choose a valid desktop Computer." };
+    else computerId = input.computerId;
+    if (computerId && (visibility !== "private" || endpoint))
+      return {
+        ok: false,
+        error:
+          "Only a private Bot running through OpenBot can use a desktop Computer.",
+      };
+  }
+  if (input.workspaceBot !== undefined) {
+    if (input.workspaceBot === null) workspaceBot = null;
+    else {
+      try {
+        workspaceBot = parseWorkspaceBot(input.workspaceBot);
+      } catch (error) {
+        return {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : "Choose a valid workspace configuration.",
+        };
+      }
+      if (visibility !== "private")
+        return { ok: false, error: "Workspace bots must be private." };
+      if (endpoint)
+        return {
+          ok: false,
+          error:
+            "A workspace bot runs through the desktop, so leave its web address empty.",
+        };
+    }
+  }
+  if (computerId && workspaceBot && computerId !== workspaceBot.workspaceId)
+    return {
+      ok: false,
+      error: "Choose the same Computer for this coding Bot and its harness.",
+    };
+
   // Absent leaves them as they are. Only the personal starter keeps instructions apart from what
   // it does, and the same limit holds for them as held when they were edited as that text.
   let instructions: string | undefined;
@@ -182,6 +235,8 @@ export function parseAgentInput(
       ...(isolated === undefined ? {} : { isolated }),
       ...(instructions === undefined ? {} : { instructions }),
       ...(harness === undefined ? {} : { harness }),
+      ...(workspaceBot === undefined ? {} : { workspaceBot }),
+      ...(computerId === undefined ? {} : { computerId }),
     },
   };
 }
@@ -385,13 +440,34 @@ export function createAgentRoutes(
     // A string comparison on purpose: two absent values must not read as "runs on our Bot".
     builtIn:
       typeof agent.endpoint === "string" && agent.endpoint === managedEndpoint,
+    canEditCodingDefaults:
+      !!agent.workspaceBot &&
+      agent.endpoint === null &&
+      agent.ownerUserId === actor.id &&
+      canManageAgent(actor, agent) &&
+      !agent.systemOwned &&
+      !agent.personalStarter &&
+      agent.visibility === "private",
+    canAssignComputer:
+      agent.ownerUserId === actor.id &&
+      canManageAgent(actor, agent) &&
+      !agent.systemOwned &&
+      !agent.personalStarter &&
+      agent.visibility === "private" &&
+      !agent.workspaceBot &&
+      (agent.endpoint === null ||
+        isManagedEndpoint(agent.endpoint, [
+          managedEndpoint,
+          ...(managedRun?.endpoints ?? []),
+        ])),
     /*
      * Whether it runs on this deployment's model, so a person can pick the model and effort per
      * conversation: a `built_in` Bot (no endpoint), or the harness picked in setup when it is one of
      * OpenBot's own that takes the choice. A Bot on any other framework picks its own model.
      */
     runsOnOpenBotModel:
-      agent.endpoint === null || takesModelChoice(agent.endpoint),
+      !agent.workspaceBot &&
+      (agent.endpoint === null || takesModelChoice(agent.endpoint)),
     /*
      * Whether OpenBot gives it a key on every run, as it does at every address it runs itself: the
      * Bot in the box and the harness picked in setup (see runtime-agents.ts). Such a Bot uses its
@@ -1039,6 +1115,8 @@ function agentDto(actor: AgentActor, agent: AgentProfile) {
     ...(agent.instructions ? { instructions: agent.instructions } : {}),
     // What runs it, by name, so a page can say that where it would otherwise show an address.
     ...(agent.framework ? { framework: agent.framework } : {}),
+    ...(agent.workspaceBot ? { workspaceBot: agent.workspaceBot } : {}),
+    computerId: agent.computerId ?? agent.workspaceBot?.workspaceId ?? null,
     canManage: canManageAgent(actor, agent),
     // Ownership, kept separate from permission. `canManage` is also true for an administrator on
     // another user's coworker, so a roster that split "mine" on it would file other people's work

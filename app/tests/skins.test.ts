@@ -54,6 +54,13 @@ describe("skin preference", () => {
   test("every skin is registered under its own id", () => {
     for (const id of SKIN_IDS) expect(SKINS[id].id).toBe(id);
   });
+
+  test("CopilotKit names the existing default appearance without changing saved preferences", () => {
+    expect(SKINS.openbot.name).toBe("CopilotKit");
+    expect(DEFAULT_SKIN).toBe("openbot");
+    expect(parseStoredSkin("openbot")).toBe(DEFAULT_SKIN);
+    expect(SKIN_IDS).toHaveLength(4);
+  });
 });
 
 describe("pre-paint skin boot", () => {

@@ -76,7 +76,15 @@ function isOwnBrowser(computer: ComputerProfile): boolean {
  * traffic leaves. Each Bot's browser stays, with Stop and Reset, because this is the one place the
  * person can sign a Bot out of everything.
  */
-export function ComputersPage({ children }: { children?: ReactNode } = {}) {
+export function ComputersPage({
+  children,
+  localComputers,
+  action,
+}: {
+  children?: ReactNode;
+  localComputers?: ReactNode;
+  action?: ReactNode;
+} = {}) {
   const paths = useManagePaths();
   const personal =
     useQuery(deploymentCapabilitiesQueryOptions()).data?.edition === "personal";
@@ -203,12 +211,15 @@ export function ComputersPage({ children }: { children?: ReactNode } = {}) {
 
   return (
     <PageShell
+      action={action}
       description={
-        personal
-          ? "Your Bots share one computer. Each Bot keeps its own browser profile there, which keeps it signed in. A command one Bot runs can still read another Bot's files."
-          : "Each person's computer, and each isolated Bot's. Every Bot keeps its own browser profile on it, which keeps that Bot signed in. Resetting a computer signs every Bot on it out of everything."
+        localComputers
+          ? "Manage the computers your Bots use, their project files, tools, and access to this Mac."
+          : personal
+            ? "Your Bots share one computer. Each Bot keeps its own browser profile there, which keeps it signed in. A command one Bot runs can still read another Bot's files."
+            : "Each person's computer, and each isolated Bot's. Every Bot keeps its own browser profile on it, which keeps that Bot signed in. Resetting a computer signs every Bot on it out of everything."
       }
-      title={personal ? "Computer" : "Computers"}
+      title={localComputers ? "Computers" : personal ? "Computer" : "Computers"}
     >
       {problem ? (
         <p
@@ -238,6 +249,8 @@ export function ComputersPage({ children }: { children?: ReactNode } = {}) {
           computer of its own.
         </p>
       ) : null}
+
+      {localComputers}
 
       <HostFoldersSection
         connected={hostAccess.data?.connected ?? false}

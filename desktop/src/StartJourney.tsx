@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import {
   CONNECT,
   type DownloadWhere,
@@ -6,7 +6,6 @@ import {
   downloadWhere,
   journey,
   type Leg,
-  leftSaid,
   OPEN,
   type PartsSeen,
   type Plan,
@@ -17,11 +16,11 @@ import {
   UPDATE,
   WAIT,
 } from "./journey";
+import { LifecycleProgress } from "./LifecycleProgress";
 import type { LocalSequence } from "./LocalIntelligence";
 import {
   type Downloads,
   formatDownloadBytes,
-  formatElapsed,
   type Progress,
 } from "./SetupProgress";
 
@@ -379,6 +378,7 @@ export function StartJourney({
   open,
   now: happening = null,
   releaseDue = false,
+  details,
 }: {
   sequence: LocalSequence;
   open: readonly Progress[];
@@ -389,6 +389,7 @@ export function StartJourney({
   now?: string | null;
   /** Start updates OpenBot itself (`upgrade_due`). */
   releaseDue?: boolean;
+  details?: ReactNode;
 }) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -409,32 +410,13 @@ export function StartJourney({
         ? happening
         : happening.replace(/\.$/, "");
   return (
-    <section className="journey" aria-label="How far along">
-      <div className="journey-head">
-        <span className="step-spinner" aria-hidden="true" />
-        <span className="journey-said">{said}</span>
-        <span className="journey-time">
-          {leftSaid(view.left)}
-          {/* A download's own measure, so a slow line can be told from a stuck one. On the same
-              line, so nothing under the journey moves as a download comes and goes. */}
-          {view.bytes && (
-            <span className="journey-bytes">
-              {" · "}
-              {view.bytes}
-            </span>
-          )}
-          <span aria-hidden="true">
-            {" · "}
-            {formatElapsed(elapsed)} so far
-          </span>
-        </span>
-      </div>
-      <progress
-        aria-label="How far along"
-        aria-valuetext={`${Math.round(view.fraction * 100)}%, ${leftSaid(view.left)}`}
-        value={view.fraction}
-        max={1}
-      />
-    </section>
+    <LifecycleProgress
+      said={said}
+      fraction={view.fraction}
+      left={view.left}
+      elapsed={elapsed}
+      bytes={view.bytes}
+      details={details}
+    />
   );
 }

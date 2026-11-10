@@ -786,15 +786,15 @@ export function ComputerTools() {
   useFrontendTool({
     name: "computer_run_command",
     description:
-      "Run a shell command on your own computer. Use this for anything the browser cannot do: " +
+      "Run a bash shell command on your assigned Computer in its project folder. Use this for " +
       "installing a tool you need, processing a file you saved, running a script. The working " +
       "directory is your workspace, so paths are relative to it and files you write here are the " +
       "same ones the file tools see. Commands run in bash, so pipes and && work. Long output is " +
       "truncated from the start, and a command that runs too long is stopped. " +
-      "For package installation, check `id -u` first. As root (0), use " +
-      "`apt-get update && apt-get install -y <package>` directly; otherwise use " +
-      "`sudo openbot-apt update && sudo openbot-apt install <package>`, which takes package " +
-      "names and nothing else, not `sudo apt-get`. If installation is refused, say so rather " +
+      "Check the installed OS and `id -u` before installing packages. On OpenBot's default " +
+      "browser computer, non-root installs use `sudo openbot-apt update && sudo openbot-apt " +
+      "install <package>`; a desktop Debian Computer uses its configured package tools. " +
+      "If installation is refused, say so rather " +
       "than retrying.",
     parameters: z.object({
       command: z

@@ -69,12 +69,19 @@ export type ComputerStatus = {
 };
 
 export const computerKeys = {
+  workspaceSkills: () => ["computers", "workspace-skills"] as const,
   all: ["computers"] as const,
   fleet: () => ["computers", "fleet"] as const,
   policy: () => ["computers", "policy"] as const,
   dryRun: (candidate: ActionPolicy) =>
     ["computers", "policy", "dry-run", candidate] as const,
   status: (botId: string) => ["computers", "status", botId] as const,
+  localVms: () => ["computers", "local-vms"] as const,
+  desktopAuth: (id: string) => ["computers", "desktop-auth", id] as const,
+  desktopModels: (id: string) => ["computers", "desktop-models", id] as const,
+  pairedDesktopVms: () => ["computers", "paired-desktop-vms"] as const,
+  conversationModel: (channelId: string) =>
+    ["computers", "conversation-model", channelId] as const,
 };
 
 /**

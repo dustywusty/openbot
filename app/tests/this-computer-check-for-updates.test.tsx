@@ -1,5 +1,5 @@
 /**
- * Settings → This computer: Check for updates on the Version row. OpenBot Desktop reads its update
+ * Computers → OpenBot home: Check for updates on the Version row. OpenBot Desktop reads its update
  * feed when asked and says what it found. These tests stand in for the IPC Tauri injects into the
  * Desktop window, answering as the shell's `openbot-desktop` plugin does
  * (desktop/src-tauri/src/desktop_page.rs); the page, its queries and its mutations are the real ones.
@@ -19,9 +19,7 @@ import {
 } from "bun:test";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 import { DOESNT_UPDATE_ITSELF } from "@openbot/shared/desktop-updates";
-import { QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
-import type { ComponentType } from "react";
+import { cleanup, fireEvent, waitFor } from "@testing-library/react";
 import {
   type DesktopAppUpdate,
   type DesktopAppUpdateCheck,
@@ -29,7 +27,7 @@ import {
   desktopKeys,
 } from "@/lib/desktop/queries";
 import { queryClient } from "@/query-client";
-import { Route as ThisComputerRoute } from "@/routes/_authed/settings/this-computer";
+import { renderHomeComputerPage } from "./home-computer.fixture";
 
 const STATUS: DesktopStatus = {
   openbotRunning: true,
@@ -102,12 +100,7 @@ afterAll(async () => {
 });
 
 function renderPage() {
-  const Page = ThisComputerRoute.options.component as ComponentType;
-  return render(
-    <QueryClientProvider client={queryClient}>
-      <Page />
-    </QueryClientProvider>,
-  );
+  return renderHomeComputerPage();
 }
 
 async function checkForUpdates() {

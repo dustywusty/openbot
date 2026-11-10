@@ -1,0 +1,29 @@
+/* Comfortable keeps each appearance's existing column widths. */
+:root[data-chat-width="wide"] [data-transcript-column],
+:root[data-chat-width="wide"] [data-slot="composer-column"] {
+  max-width: 72rem;
+}
+
+:root[data-chat-width="full"] [data-transcript-column],
+:root[data-chat-width="full"] [data-slot="composer-column"] {
+  max-width: 100%;
+}
+
+:root[data-chat-width] [data-transcript-column],
+:root[data-chat-width] [data-slot="composer-column"] {
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+:root[data-chat-width] [data-transcript-column] pre {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+/* Keep a readable inset even when a skin normally removes composer padding. */
+:root[data-chat-width="wide"] [data-transcript-column],
+:root[data-chat-width="wide"] [data-slot="composer-column"],
+:root[data-chat-width="full"] [data-transcript-column],
+:root[data-chat-width="full"] [data-slot="composer-column"] {
+  padding-inline: 1rem;
+}

@@ -173,6 +173,8 @@ services:
       # The desktop's host-access broker proves itself with this. Minted per start and given to the
       # server alone, so it is named here and nowhere else in this file.
       OPENBOT_DESKTOP_HOST_TOKEN: ${OPENBOT_DESKTOP_HOST_TOKEN:-}
+      # Stable desktop identity used to restore this installation's workspace pairings.
+      OPENBOT_DESKTOP_INSTALLATION_ID: ${OPENBOT_DESKTOP_INSTALLATION_ID:-}
       # The app broker's settings. A Composio key the desktop provisioned at CopilotKit sign-in lives
       # in its protected store, never in `.env`, so it reaches this container only by being named
       # here. A key the person put in `.env` wins and arrives the same way.

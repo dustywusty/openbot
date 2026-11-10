@@ -1,3 +1,8 @@
+import { createDesktopComputerExecution } from "./computer/desktop-execution";
+import { createDesktopModelChoices } from "./computer/model-choice";
+import { createDesktopComputerBroker } from "./computer/desktop-broker";
+import { createDesktopPairingStore } from "./computer/desktop-pairing-store";
+import { DesktopHarnessAgent } from "./computer/harness-agent";
 import type { AbstractAgent } from "@ag-ui/client";
 import {
   CopilotKitIntelligence,
@@ -483,6 +488,10 @@ const agentProfileStore = createAgentProfileStore(
   database,
   config.managedAgent?.endpoint,
   agentVault,
+  {
+    desktopComputerOwned: async (actor, computerId) =>
+      desktopComputerBroker.ownerOf(computerId) === actor.id,
+  },
 );
 // Read here rather than beside the synchronise below, because the package names the deployment and
 // the channel store needs that name before it can mint a thread id.
@@ -526,10 +535,54 @@ const channelActivityListener = await startChannelActivityListener(
   channelEvents,
 );
 const roleRepository = createRoleRepository(database);
+const desktopPairingStore = createDesktopPairingStore(database, config.singleUser ? { singleUserOwnerId: DEV_ACTOR.id } : {});
+const desktopComputerBroker = createDesktopComputerBroker({
+  canDispatch: async ({ actorId, botId, computerId }) => {
+    if (!config.desktopInstallationId) return false;
+    const pairing = await desktopPairingStore.owned(actorId, config.desktopInstallationId, computerId);
+    if (!pairing || pairing.bindingId !== desktopComputerBroker.bindingOf(computerId)) return false;
+    const profile = await agentProfileStore.get(
+      { id: actorId, role: "user" },
+      botId,
+    );
+    return (
+      profile?.ownerUserId === actorId &&
+      profile.visibility === "private" &&
+      !profile.systemOwned &&
+      (profile.workspaceBot?.workspaceId === computerId ||
+        profile.computerId === computerId)
+    );
+  },
+});
+
+const desktopModelChoices = createDesktopModelChoices({
+  database,
+  broker: desktopComputerBroker,
+  binding: async (actor, channelId) => {
+    const channel = await channelStore.get(actor, channelId);
+    if (channel?.agentIds.length !== 1) return null;
+    const profile = await agentProfileStore.get(actor, channel.agentIds[0]);
+    return profile?.ownerUserId === actor.id && profile.workspaceBot
+      ? { botId: profile.id, settings: profile.workspaceBot }
+      : null;
+  },
+});
+
 const loadAgentsForActor = createRuntimeAgentLoader(
   database,
   agentVault,
   config.managedAgent,
+  (actor, agent, instructions) =>
+    new DesktopHarnessAgent({
+      actorId: actor.id,
+      botId: agent.id,
+      name: agent.name,
+      settings: agent.workspaceBot,
+      instructions,
+      broker: desktopComputerBroker,
+      choice: (threadId) =>
+        desktopModelChoices.forRun(actor, agent.id, threadId),
+    }),
 );
 await synchronizeTenantPackage(database, tenantPackage);
 /*
@@ -552,8 +605,12 @@ const peopleStore = createPeopleStore(
    * then the binding is there. The linked-account half writes its audit rows through a store made
    * on its own transaction, so it reads no later binding (`bootAuditStore` included).
    */
-  (userId, by) =>
-    retireOwnedAccounts({
+  async (userId, by) => {
+    return retireOwnedAccounts({
+      computers: async () => {
+        try { await desktopPairingStore.revokeOwner(userId); }
+        finally { desktopComputerBroker.revokeOwner(userId); }
+      },
       plugins: () => pluginStore.retireConnectionsFor(userId, by),
       identities: () =>
         retireIdentityLinks(
@@ -565,7 +622,8 @@ const peopleStore = createPeopleStore(
         ),
       // Removing somebody ends their sessions, so it ends their browsers' Recorders too.
       recorders: () => signOutRecorders(userId, "person_removed"),
-    }),
+    });
+  },
 );
 const identityProviderStore = createIdentityProviderStore(database);
 /*
@@ -968,6 +1026,11 @@ const computerSeats = computerProvider
 const computerGateway = computerProvider
   ? createComputerGateway({
       provider: computerProvider,
+      nativeExecution: createDesktopComputerExecution({
+        profiles: agentProfileStore,
+        broker: desktopComputerBroker,
+        botOwnership: botOwnership(database),
+      }),
       ...(computerSeats ? { seats: computerSeats } : {}),
       // Who each person's computer belongs to, for the admin list.
       people: async (ids) =>
@@ -3332,6 +3395,13 @@ const app = createApp(
     },
     models: modelCatalogue,
     modelChoices,
+    desktopModelChoices,
+    desktopComputers: {
+      broker: desktopComputerBroker,
+      desktopToken: process.env.OPENBOT_DESKTOP_HOST_TOKEN,
+      pairings: desktopPairingStore,
+      installationId: config.desktopInstallationId,
+    },
     // The checklist onboarding ends on. Facts and verdicts about this configuration, never values.
     setup: createSetupSources({
       productName: tenantPackage.productName,
@@ -3393,6 +3463,7 @@ if (config.singleUser) {
 // so a watch-mode restart does not leave two behind on every reload.
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
   process.on(signal, () => {
+    desktopComputerBroker.dispose();
     responsibilitySweep.stop();
     wakeUpSweep.stop();
     wakeUpReaper.stop();

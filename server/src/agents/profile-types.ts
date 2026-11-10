@@ -1,3 +1,4 @@
+import type { WorkspaceBot } from "@openbot/shared/workspace-bot";
 export type AgentVisibility = "public" | "private";
 
 export type AgentActor = {
@@ -6,6 +7,11 @@ export type AgentActor = {
 };
 
 export type AgentProfile = {
+  /** Internal projection for server-side Computer assignment eligibility. */
+  personalStarter?: boolean;
+  /** An owned desktop VM for the existing file/command tools; absent uses the default computer. */
+  computerId?: string | null;
+  workspaceBot?: WorkspaceBot | null;
   id: string;
   name: string;
   title: string;
@@ -93,4 +99,6 @@ export type CreateAgentInput = Pick<
    * what runs it whatever its subtitle says (`frameworkOf`).
    */
   harness?: string;
+  computerId?: string | null;
+  workspaceBot?: WorkspaceBot | null;
 };

@@ -151,6 +151,8 @@ export async function retireOwnedAccounts(retirers: {
   identities: () => Promise<number>;
   /** The person's browsers' Recorders, signed out with them. Absent where there is no Recorder. */
   recorders?: () => Promise<void>;
+  /** Durable desktop bindings and current desktop jobs, attempted even when another retirement fails. */
+  computers?: () => Promise<void>;
 }): Promise<{ retired: number }> {
   const failures: Array<{ part: string; error: unknown }> = [];
   let retired = 0;
@@ -169,6 +171,13 @@ export async function retireOwnedAccounts(retirers: {
       await retirers.recorders();
     } catch (error) {
       failures.push({ part: "Recorder connections", error });
+    }
+  }
+  if (retirers.computers) {
+    try {
+      await retirers.computers();
+    } catch (error) {
+      failures.push({ part: "desktop computers", error });
     }
   }
   if (failures.length === 1) throw failures[0]?.error;

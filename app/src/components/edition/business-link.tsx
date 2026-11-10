@@ -1,27 +1,13 @@
 import { IconX } from "@tabler/icons-react";
-import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { deploymentCapabilitiesQueryOptions } from "@/lib/deployment/queries";
 import { BUSINESS_URL } from "@/lib/openbot-for-business";
+import {
+  dismissSelfHostBannerMutationOptions,
+  useUserPreferences,
+} from "@/lib/settings/message-list";
 import { cn } from "@/lib/utils";
-
-/**
- * Closed for this session only. The link comes back the next time the app starts, or the next tab:
- * it is an offer, not a setting, so closing it is not saved anywhere that outlives the window.
- *
- * The desktop window hides when closed rather than quitting, so there it comes back after Quit.
- */
-const DISMISSED = "openbot:business-link-dismissed";
-
-function readDismissed(): boolean {
-  try {
-    return sessionStorage.getItem(DISMISSED) === "1";
-  } catch {
-    // Storage refused (a locked-down browser): show it, and closing still works until a reload.
-    return false;
-  }
-}
 
 /**
  * The home page's link to OpenBot for Business, in the personal edition only.
@@ -30,9 +16,18 @@ function readDismissed(): boolean {
  */
 export function BusinessLink() {
   const { data: capabilities } = useQuery(deploymentCapabilitiesQueryOptions());
-  const [dismissed, setDismissed] = useState(readDismissed);
+  const { data: preferences, userId } = useUserPreferences();
+  const queryClient = useQueryClient();
+  const dismiss = useMutation(
+    dismissSelfHostBannerMutationOptions(queryClient, userId),
+  );
 
-  if (capabilities?.edition !== "personal" || dismissed) return null;
+  if (
+    capabilities?.edition !== "personal" ||
+    !preferences ||
+    preferences.selfHostBannerDismissed
+  )
+    return null;
 
   return (
     <span className="flex items-center gap-0.5">
@@ -51,19 +46,18 @@ export function BusinessLink() {
       <Button
         aria-label="Close"
         className="text-muted-foreground"
-        onClick={() => {
-          try {
-            sessionStorage.setItem(DISMISSED, "1");
-          } catch {
-            // Closed for this page only.
-          }
-          setDismissed(true);
-        }}
+        onClick={() => dismiss.mutate()}
+        disabled={dismiss.isPending}
         size="icon-xs"
         variant="ghost"
       >
         <IconX />
       </Button>
+      {dismiss.isError ? (
+        <span role="alert" className="text-xs text-destructive">
+          Could not save your choice. Close it again to retry.
+        </span>
+      ) : null}
     </span>
   );
 }

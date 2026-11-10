@@ -6,6 +6,15 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { agentQueryOptions } from "@/lib/agents/queries";
+import { effortLabel } from "@/lib/models/effort";
+import {
+  codingPermissionDescription,
+  codingPermissionLabel,
+} from "@/lib/computers/coding-permissions";
+import {
+  codingConversationModelQueryOptions,
+  pairedDesktopVmsQueryOptions,
+} from "@/lib/computers/desktop-queries";
 
 function Tag({ children }: { children: ReactNode }) {
   return (
@@ -50,14 +59,26 @@ function ProfileSkeleton() {
 export function AgentProfile({
   agentId,
   footer,
+  channelId,
 }: {
   agentId: string;
+  channelId?: string;
   /** What the panel offers about the conversation rather than the Bot, below a separator. */
   footer?: ReactNode;
 }) {
   /** The full dialog, opened over the chat rather than navigating away from it. */
   const navigate = useNavigate();
   const agent = useQuery(agentQueryOptions(agentId));
+  const coding = useQuery(
+    codingConversationModelQueryOptions(
+      channelId ?? "",
+      !!channelId && !!agent.data?.workspaceBot,
+    ),
+  );
+  const vms = useQuery({
+    ...pairedDesktopVmsQueryOptions(),
+    enabled: !!agent.data?.computerId || !!agent.data?.workspaceBot,
+  });
 
   if (agent.isPending) {
     return <ProfileSkeleton />;
@@ -71,6 +92,26 @@ export function AgentProfile({
   }
 
   const profile = agent.data;
+  const choice = coding.data?.choice;
+  const effectiveModel =
+    choice?.model ??
+    profile.workspaceBot?.model ??
+    coding.data?.catalogue.default;
+  const modelLabel =
+    coding.data?.catalogue.models.find((model) => model.id === effectiveModel)
+      ?.label ??
+    effectiveModel ??
+    "Harness default";
+  const effectiveEffort = choice
+    ? (choice.effort ??
+      coding.data?.catalogue.models.find((model) => model.id === effectiveModel)
+        ?.defaultEffort)
+    : profile.workspaceBot?.effort;
+  const vmName = vms.data?.find(
+    (vm) =>
+      vm.computerId ===
+      (profile.computerId ?? profile.workspaceBot?.workspaceId),
+  )?.name;
 
   return (
     <div className="flex w-full flex-col gap-6 p-8">
@@ -105,6 +146,95 @@ export function AgentProfile({
           {profile.roleDescription}
         </p>
       </section>
+
+      {profile.workspaceBot ? (
+        <section className="grid gap-2">
+          <h2 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            Coding setup
+          </h2>
+          <dl className="grid gap-2 text-sm">
+            <div className="flex justify-between gap-3">
+              <dt className="text-muted-foreground">Harness</dt>
+              <dd>
+                {profile.workspaceBot.runtime === "codex"
+                  ? "Codex"
+                  : "Claude Code"}
+              </dd>
+            </div>
+            <div className="flex justify-between gap-3">
+              <dt className="text-muted-foreground">
+                {choice ? "Model" : "Default model"}
+              </dt>
+              <dd className="break-all text-right">{modelLabel}</dd>
+            </div>
+            <div className="flex justify-between gap-3">
+              <dt className="text-muted-foreground">
+                {choice ? "Thinking effort" : "Default effort"}
+              </dt>
+              <dd>
+                {effectiveEffort
+                  ? effortLabel(effectiveEffort)
+                  : "Model default"}
+              </dd>
+            </div>
+            <div className="flex justify-between gap-3">
+              <dt className="text-muted-foreground">Speed</dt>
+              <dd>
+                {(choice?.speed ?? profile.workspaceBot.speed) === "fast"
+                  ? "Fast"
+                  : "Standard"}
+              </dd>
+            </div>
+            <div className="flex justify-between gap-3">
+              <dt className="text-muted-foreground">VM access</dt>
+              <dd>{codingPermissionLabel(profile.workspaceBot.permission)}</dd>
+            </div>
+          </dl>
+          {coding.error ? (
+            <p className="text-sm text-muted-foreground">
+              Current conversation settings are unavailable. Showing the Bot's
+              defaults.
+            </p>
+          ) : null}
+          <p className="text-sm text-muted-foreground">
+            {codingPermissionDescription(profile.workspaceBot.permission)}
+          </p>
+          <Button
+            size="sm"
+            variant="outline"
+            render={
+              <Link
+                to="/computers/$computerId"
+                params={{ computerId: profile.workspaceBot.workspaceId }}
+              />
+            }
+          >
+            {vmName ? `Open ${vmName}` : "Open project VM"}
+          </Button>
+        </section>
+      ) : null}
+      {!profile.workspaceBot && profile.computerId ? (
+        <section className="grid gap-2">
+          <h2 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            Computer
+          </h2>
+          <p className="text-sm">
+            File and command tools run in {vmName ?? "its assigned project VM"}.
+          </p>
+          <Button
+            size="sm"
+            variant="outline"
+            render={
+              <Link
+                to="/computers/$computerId"
+                params={{ computerId: profile.computerId }}
+              />
+            }
+          >
+            {vmName ? `Open ${vmName}` : "Open project VM"}
+          </Button>
+        </section>
+      ) : null}
 
       <div className="flex flex-col gap-2">
         <Button

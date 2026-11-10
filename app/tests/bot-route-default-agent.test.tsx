@@ -12,6 +12,7 @@ import {
   RouterProvider,
 } from "@tanstack/react-router";
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -19,6 +20,11 @@ import {
   within,
 } from "@testing-library/react";
 import { type AgentProfile, agentKeys } from "@/lib/agents/queries";
+import {
+  showComputerView,
+  takeRequestedView,
+} from "@/lib/computers/panel-view";
+import { computerDetailSearch } from "@/lib/computers/vm-target";
 import { Route as BotRoute } from "@/routes/_authed/_app/bot";
 
 let originalRect: typeof HTMLElement.prototype.getBoundingClientRect;
@@ -134,8 +140,24 @@ const testBotRoute = BotRoute.update({
   path: "/bot",
   getParentRoute: () => appRoute,
 } as TestFileRouteWiring);
+const nativeComputerRoute = createRoute({
+  path: "/computers/$computerId",
+  getParentRoute: () => appRoute,
+  validateSearch: computerDetailSearch,
+  component: () => {
+    const { computerId } = nativeComputerRoute.useParams();
+    const { view } = nativeComputerRoute.useSearch();
+    return (
+      <div data-testid="native-computer">
+        {computerId}:{view ?? "setup"}
+      </div>
+    );
+  },
+});
 const routeTree = rootRoute.addChildren([
-  authedRoute.addChildren([appRoute.addChildren([testBotRoute])]),
+  authedRoute.addChildren([
+    appRoute.addChildren([testBotRoute, nativeComputerRoute]),
+  ]),
 ]);
 
 function renderBot(queryClient: QueryClient, initialEntry = "/bot") {
@@ -397,4 +419,44 @@ test("/bot?watch=true restores the live Computer panel on reload", async () => {
   expect(view.getByTestId("copilot-chat").dataset.agentId).toBe(
     "general-assistant",
   );
+});
+
+test("/bot assigned VM replaces browser controls and ignores old watch links", async () => {
+  const view = renderBot(
+    queryClientWithAgents([
+      agent({ ...GENERAL_ASSISTANT, computerId: "obw-1234567890abcdef" }),
+    ]),
+    "/bot?agent=general-assistant&watch=true",
+  );
+  const link = await view.findByRole("button", { name: "Open workspace" });
+  expect(link.getAttribute("href")).toBe("/computers/obw-1234567890abcdef");
+  expect(view.queryByRole("region", { name: "Computer sidebar" })).toBeNull();
+  expect(
+    view.queryByText("Ask it to open a page and watch it work."),
+  ).toBeNull();
+  act(() => showComputerView("general-assistant", "terminal"));
+  expect((await view.findByTestId("native-computer")).textContent).toBe(
+    "obw-1234567890abcdef:shell",
+  );
+  takeRequestedView("general-assistant");
+});
+
+test("/bot native coding profile opens its VM when the assignment field is absent", async () => {
+  const view = renderBot(
+    queryClientWithAgents([
+      agent({
+        ...GENERAL_ASSISTANT,
+        workspaceBot: {
+          workspaceId: "obw-abcdef1234567890",
+          runtime: "codex",
+          model: null,
+          effort: null,
+          speed: "standard",
+          permission: "workspace-write",
+        },
+      }),
+    ]),
+  );
+  const link = await view.findByRole("button", { name: "Open workspace" });
+  expect(link.getAttribute("href")).toBe("/computers/obw-abcdef1234567890");
 });

@@ -1,6 +1,11 @@
+import type { AbstractAgent } from "@ag-ui/client";
 import { and, eq, isNotNull, isNull, or } from "drizzle-orm";
 import type { ManagedAgentConfig } from "../config";
-import { type RegisteredAgent, registeredAgentFromRow } from "../copilot";
+import {
+  type RegisteredAgent,
+  type RegisteredDesktopAgent,
+  registeredAgentFromRow,
+} from "../copilot";
 import type { CredentialSecretReader } from "../credentials";
 import type { Database } from "../db/client";
 import {
@@ -28,6 +33,11 @@ export function createRuntimeAgentLoader(
   vault?: { reader: CredentialSecretReader; encryptionKey: string },
   /** Secret for the deployment-managed Bot. Never sent to customer-owned endpoints. */
   managedAgent?: ManagedAgentConfig,
+  desktopTransport?: (
+    actor: AgentActor,
+    agent: RegisteredDesktopAgent,
+    instructions: string,
+  ) => AbstractAgent,
 ) {
   return async (actor: AgentActor): Promise<RegisteredAgent[]> => {
     const [active, tombstones] = await Promise.all([
@@ -41,6 +51,10 @@ export function createRuntimeAgentLoader(
     for (const row of active) {
       const agent = registeredAgentFromRow(row);
       if (!agent) continue;
+      if (agent.type === "desktop_harness" && desktopTransport) {
+        agent.transport = (instructions) =>
+          desktopTransport(actor, agent, instructions);
+      }
       const isRemoteAgent =
         agent.type === "remote_ag_ui" || agent.type === "remote_mastra";
       // The key is resolved per load, rather than being cached on the row: revoking a

@@ -1,6 +1,6 @@
 import { IconSettings } from "@tabler/icons-react";
 import { useQuery } from "@tanstack/react-query";
-import { createFileRoute, Navigate } from "@tanstack/react-router";
+import { createFileRoute, Link, Navigate } from "@tanstack/react-router";
 import { motion, useReducedMotion } from "motion/react";
 import { z } from "zod";
 import { AgentProfile } from "@/components/agents/agent-profile";
@@ -15,9 +15,11 @@ import { useAutoWatchScreen } from "@/components/computer/use-auto-watch-screen"
 import { DetailPanel } from "@/components/layout/detail-panel";
 import { SidebarToggle } from "@/components/layout/sidebar-toggle";
 import { Button } from "@/components/ui/button";
+import { agentQueryOptions } from "@/lib/agents/queries";
 import { useMarkOpenChannelRead } from "@/lib/channels/mark-read";
 import { type AgentChannel, channelQueryOptions } from "@/lib/channels/queries";
 import { useOpenComputerOnRequest } from "@/lib/computers/panel-view";
+import { assignedVm } from "@/lib/computers/vm-target";
 
 const chatSearchSchema = z.object({
   settings: z.boolean().optional(),
@@ -48,15 +50,21 @@ function RouteComponent() {
   const navigate = Route.useNavigate();
   const isSettingsOpen = settings === true;
   const prefersReducedMotion = useReducedMotion();
-  const isWatching = watch === true;
+
   /** Channel routing currently supports one coworker. */
   const agentId = channel.data?.agentIds[0];
+  const profile = useQuery({
+    ...agentQueryOptions(agentId ?? ""),
+    enabled: agentId !== undefined,
+  });
+  const vmId = assignedVm(profile.data);
+  const isWatching = watch === true && profile.data !== undefined && !vmId;
 
   useMarkOpenChannelRead(channelId);
 
   // Browser activity may auto-open the screen once per run unless this run was dismissed.
   const autoWatch = useAutoWatchScreen({
-    botId: agentId,
+    botId: profile.data && !vmId ? agentId : undefined,
     watching: isWatching,
     busy: isSettingsOpen,
     open: () =>
@@ -72,7 +80,17 @@ function RouteComponent() {
   });
 
   // A command in the chat clicked opens the Computer on its terminal.
-  useOpenComputerOnRequest(agentId, () => show("watch"));
+  useOpenComputerOnRequest(agentId, (view) => {
+    if (vmId) {
+      return navigate({
+        to: "/computers/$computerId",
+        params: { computerId: vmId },
+        search: { view: view === "terminal" ? "shell" : "setup" },
+        hash: view === "terminal" ? "computer-shell" : undefined,
+      });
+    }
+    if (profile.data) return show("watch");
+  });
 
   // Settings and watch share one pane; opening either clears the other URL flag.
   const show = (next: "settings" | "watch" | null) => {
@@ -105,6 +123,7 @@ function RouteComponent() {
         ) : (
           <AgentProfile
             agentId={agentId}
+            channelId={channelId}
             footer={
               channel.data ? (
                 <ConversationActions
@@ -163,11 +182,26 @@ function RouteComponent() {
             </motion.span>
           </div>
           <div className="flex flex-row gap-1.5">
-            <ComputerChatControls
-              computerId={agentId}
-              open={isWatching}
-              onOpenChange={(open) => show(open ? "watch" : null)}
-            />
+            {vmId ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                render={
+                  <Link
+                    to="/computers/$computerId"
+                    params={{ computerId: vmId }}
+                  />
+                }
+              >
+                Open workspace
+              </Button>
+            ) : profile.data ? (
+              <ComputerChatControls
+                computerId={agentId}
+                open={isWatching}
+                onOpenChange={(open) => show(open ? "watch" : null)}
+              />
+            ) : null}
             <Button
               aria-label="This conversation's Bot"
               aria-pressed={isSettingsOpen}

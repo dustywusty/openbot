@@ -85,6 +85,7 @@ function setup({
     selfHostBannerDismissed: dismissed,
     narration: null,
     skin: "openbot",
+    chatWidth: "comfortable",
     proactive: "on",
   };
   client.setQueryData(

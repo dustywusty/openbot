@@ -17,6 +17,7 @@ import {
   offerLocalIntelligence,
   splitStopFailure,
 } from "./localEvalCli";
+import { PodmanGoAhead } from "./PodmanGoAhead";
 import { asProblem, Failure, InlineFailure, type Problem } from "./Problem";
 import {
   type HeldConfiguration,
@@ -25,13 +26,11 @@ import {
   recordedModel,
 } from "./ProviderPicker";
 import { Sections } from "./Sections";
-import { StartFresh } from "./StartFresh";
-import { PodmanGoAhead } from "./PodmanGoAhead";
 import {
+  BehindSlot,
   engineNow,
   goAheadNow,
   handOffNow,
-  BehindSlot,
   INSTALL_BLURB,
   installingBehind,
   type Progress,
@@ -41,6 +40,7 @@ import {
   trayPlace,
 } from "./SetupProgress";
 import { ShuttingDown, useQuitStatus } from "./ShuttingDown";
+import { StartFresh } from "./StartFresh";
 import {
   harnessChoiceEvent,
   modelChoiceEvent,
@@ -809,7 +809,7 @@ function Setup() {
 
   if (checkingResume) {
     return (
-      <main>
+      <main className="lifecycle">
         <div className="sheet connection-sheet">
           <h1>Getting OpenBot ready</h1>
           <p className="lede" role="status">
@@ -1040,7 +1040,7 @@ function Setup() {
 
   if (!running && returningToInstallation && !refreshIntelligence) {
     return (
-      <main>
+      <main className="lifecycle">
         <div className="sheet connection-sheet">
           <h1>{localStarting ? "Starting OpenBot" : "OpenBot is stopped"}</h1>
           <p className="lede">
@@ -1111,7 +1111,7 @@ function Setup() {
    */
   if (!running) {
     return (
-      <main>
+      <main className="lifecycle">
         <div className="sheet connection-sheet">
           {leftoverVolumes.length > 0 && (
             <StartFresh

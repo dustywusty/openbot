@@ -231,8 +231,10 @@ beforeAll(async () => {
   if (!asked) return;
   built = await buildWindow();
   const { chromium } = (await import(PLAYWRIGHT)) as { chromium: Chromium };
-  // The CI job installs full Chromium without the headless shell.
-  browser = await chromium.launch({ channel: "chromium" });
+  // CI installs full Chromium. Local checks may use an installed Chrome without another download.
+  browser = await chromium.launch({
+    channel: process.env.OPENBOT_APP_BROWSER_CHANNEL ?? "chromium",
+  });
 });
 
 afterAll(async () => {
@@ -434,30 +436,246 @@ async function anchors(page: Page) {
   const heading = await page
     .getByRole("heading", { name: "Starting OpenBot" })
     .boundingBox();
-  const first = await page
-    .getByRole("listitem", { name: "Setting up OpenBot" })
-    .boundingBox();
+  const first = await page.locator(".journey-said").boundingBox();
   return { heading: heading?.y, first: first?.y };
 }
 
+/** Lifecycle layout is measured against the usable area below the window controls. */
+async function lifecycleGeometry(page: Page) {
+  return page.evaluate(() => {
+    const main = document.querySelector("main");
+    const card = document.querySelector("main > .sheet");
+    if (!(main instanceof HTMLElement) || !(card instanceof HTMLElement))
+      throw new Error("The lifecycle screen has no card.");
+    const frame = main.getBoundingClientRect();
+    const panel = card.getBoundingClientRect();
+    const style = getComputedStyle(main);
+    const top = frame.top + Number.parseFloat(style.paddingTop);
+    const bottom = frame.bottom - Number.parseFloat(style.paddingBottom);
+    const visibleBars = Array.from(
+      document.querySelectorAll("progress"),
+    ).filter((bar) => {
+      const box = bar.getBoundingClientRect();
+      return (
+        box.width > 0 &&
+        box.height > 0 &&
+        getComputedStyle(bar).visibility !== "hidden"
+      );
+    }).length;
+    return {
+      horizontalOffset: Math.abs(
+        panel.left + panel.width / 2 - window.innerWidth / 2,
+      ),
+      verticalOffset: Math.abs(
+        panel.top + panel.height / 2 - (top + bottom) / 2,
+      ),
+      withinSafeArea:
+        panel.top >= top - 1 &&
+        panel.bottom <= bottom + 1 &&
+        panel.left >= 0 &&
+        panel.right <= window.innerWidth,
+      pageHeight: document.documentElement.scrollHeight,
+      windowHeight: window.innerHeight,
+      visibleBars,
+      lifecycle: main.classList.contains("lifecycle"),
+    };
+  });
+}
+
+async function expectCentredLifecycle(page: Page, bars = 1) {
+  const measured = await lifecycleGeometry(page);
+  expect(measured.lifecycle).toBe(true);
+  expect(measured.horizontalOffset).toBeLessThan(1);
+  expect(measured.verticalOffset).toBeLessThan(1);
+  expect(measured.withinSafeArea).toBe(true);
+  expect(measured.pageHeight).toBe(measured.windowHeight);
+  expect(measured.visibleBars).toBe(bars);
+}
+
+async function emitQuit(page: Page, seq: number, steps: unknown[]) {
+  await page.evaluate(
+    (status) => {
+      (
+        globalThis as unknown as {
+          __fake: { emit: (name: string, payload: unknown) => void };
+        }
+      ).__fake.emit("quit:progress", status);
+    },
+    { seq, steps },
+  );
+}
+
+describe.skipIf(!asked)("lifecycle cards fit the window", () => {
+  for (const [width, height] of [
+    [720, 560],
+    [1000, 800],
+    [1600, 1000],
+  ] as const) {
+    for (const [hash, heading] of [
+      ["#start", "Starting OpenBot"],
+      ["#shutting-down", "Shutting down OpenBot"],
+    ] as const) {
+      test(`${heading} stays centred with one progress bar and expandable history at ${width}x${height}`, async () => {
+        const page = await browser.newPage({ viewport: { width, height } });
+        try {
+          await open(page, hash);
+          await page.getByRole("heading", { name: heading }).waitFor();
+          if (hash === "#shutting-down") {
+            await emitQuit(page, 1, [
+              {
+                step: "stop",
+                ok: true,
+                running: true,
+                detail: "Stopping OpenBot.",
+              },
+            ]);
+          }
+          await page.getByRole("progressbar").waitFor();
+          await page.waitForTimeout(600);
+          await expectCentredLifecycle(page);
+          const details = await page.evaluate(() => {
+            const element = document.querySelector("main details");
+            return element instanceof HTMLDetailsElement
+              ? {
+                  open: element.open,
+                  text: element.querySelector("summary")?.textContent,
+                }
+              : null;
+          });
+          expect(details?.open).toBe(false);
+          expect(details?.text).toContain("Details");
+
+          if (hash === "#shutting-down") {
+            await emitQuit(page, 2, [
+              ...Array.from({ length: 24 }, (_, index) => ({
+                step: `Service ${index}`,
+                ok: true,
+                detail: `Service ${index} has stopped.`,
+              })),
+              {
+                step: "stop-services",
+                ok: true,
+                running: true,
+                detail:
+                  "Stopping the services OpenBot started on this computer while preserving your saved connections and project files.",
+              },
+            ]);
+            await page.waitForTimeout(100);
+            await expectCentredLifecycle(page);
+            // Native closed Details may retain descendant layout boxes in Chromium.
+            // Its rows must be absent from the accessible, visible list until opened.
+            expect(
+              await page.evaluate(() => {
+                const row = document.querySelector('[aria-label="Service 23"]');
+                const history = row?.closest("details");
+                return Boolean(history && !history.open);
+              }),
+            ).toBe(true);
+            await page
+              .getByRole("listitem", { name: "Service 23" })
+              .waitFor({ state: "hidden" });
+
+            // Expanding is explicit. The card and history stay inside the viewport at all sizes.
+            await page.locator("main details > summary").click();
+            await page.getByRole("listitem", { name: "Service 23" }).waitFor();
+            await expectCentredLifecycle(page);
+            const overflow = await page.evaluate(() => {
+              const card = document.querySelector(
+                "main > .sheet",
+              ) as HTMLElement;
+              const history = document.querySelector(
+                "main details",
+              ) as HTMLElement;
+              const scrollers = [
+                card,
+                history,
+                ...Array.from(history.querySelectorAll<HTMLElement>("*")),
+              ].filter(
+                (node) =>
+                  node.scrollHeight > node.clientHeight &&
+                  ["auto", "scroll"].includes(getComputedStyle(node).overflowY),
+              );
+              for (const node of scrollers) node.scrollTop = node.scrollHeight;
+              return {
+                hasScroller: scrollers.length > 0,
+                reachedEnd: scrollers.every(
+                  (node) =>
+                    node.scrollTop + node.clientHeight >= node.scrollHeight - 1,
+                ),
+                pageHeight: document.documentElement.scrollHeight,
+                windowHeight: window.innerHeight,
+              };
+            });
+            expect(overflow.hasScroller).toBe(true);
+            expect(overflow.reachedEnd).toBe(true);
+            expect(overflow.pageHeight).toBe(overflow.windowHeight);
+          }
+        } finally {
+          await page.close();
+        }
+      }, 30_000);
+    }
+
+    test(`shutdown failure stays visible without opening Details at ${width}x${height}`, async () => {
+      const page = await browser.newPage({ viewport: { width, height } });
+      try {
+        await open(page, "#shutting-down");
+        await page
+          .getByRole("heading", { name: "Shutting down OpenBot" })
+          .waitFor();
+        await emitQuit(page, 1, [
+          {
+            step: "stop-services",
+            ok: false,
+            detail: "The selected service could not stop.",
+          },
+        ]);
+        await page
+          .getByText("The selected service could not stop.", { exact: true })
+          .waitFor();
+        await page.waitForTimeout(600);
+        const visible = await page
+          .getByText("The selected service could not stop.", { exact: true })
+          .boundingBox();
+        expect(visible?.y ?? -1).toBeGreaterThanOrEqual(0);
+        expect((visible?.y ?? 0) + (visible?.height ?? 0)).toBeLessThanOrEqual(
+          height,
+        );
+        expect(
+          await page.evaluate(
+            () =>
+              (
+                document.querySelector(
+                  "main details",
+                ) as HTMLDetailsElement | null
+              )?.open ?? false,
+          ),
+        ).toBe(false);
+        await expectCentredLifecycle(page, 0);
+      } finally {
+        await page.close();
+      }
+    }, 30_000);
+  }
+});
+
 /*
- * Seen on Windows: Start's card re-centred as rows came and went while OpenBot updated, so the
- * heading and the rows jumped up 31px when the update's row appeared, up 20px when its download
- * bar did, and down 20px when the bar went. The card is held from the top now, and the update is
- * the Start journey's: its download's measure sits on the journey's time line, so neither the
- * heading nor the rows move as it comes and goes.
+ * Start stays centred when a stage changes its detail text. Download byte progress uses the
+ * journey's existing time line, so it adds no row or bar and never shifts the displayed rows.
  */
 describe.skipIf(!asked)("the Start screen while OpenBot updates", () => {
   for (const [width, height] of [
     [1000, 800],
     [720, 560],
+    [1600, 1000],
   ] as const) {
-    test(`at ${width}x${height}, nothing on screen moves as the update and its download come and go`, async () => {
+    test(`at ${width}x${height}, Start stays centred and download progress does not shift its rows`, async () => {
       const page = await browser.newPage({ viewport: { width, height } });
       try {
         await open(page, "#start");
-        await page.getByRole("listitem", { name: "Opening OpenBot" }).waitFor();
+        await page.getByRole("progressbar").waitFor();
         await page.waitForTimeout(600);
+        await expectCentredLifecycle(page);
         const before = await anchors(page);
         expect(before.heading).toBeGreaterThan(0);
         const said = page.locator(".journey-said");
@@ -483,7 +701,22 @@ describe.skipIf(!asked)("the Start screen while OpenBot updates", () => {
         await page
           .locator(".journey-said", { hasText: "Downloading the update" })
           .waitFor();
-        expect(await anchors(page)).toEqual(before);
+        await expectCentredLifecycle(page);
+        const updating = await anchors(page);
+        expect((updating.first ?? 0) - (updating.heading ?? 0)).toBe(
+          (before.first ?? 0) - (before.heading ?? 0),
+        );
+        const centred = await page.evaluate(() => {
+          const main = document.querySelector("main") as HTMLElement;
+          const card = document.querySelector("main > .sheet") as HTMLElement;
+          const frame = main.getBoundingClientRect();
+          const panel = card.getBoundingClientRect();
+          const style = getComputedStyle(main);
+          const top = frame.top + Number.parseFloat(style.paddingTop);
+          const bottom = frame.bottom - Number.parseFloat(style.paddingBottom);
+          return Math.abs(panel.top + panel.height / 2 - (top + bottom) / 2);
+        });
+        expect(centred).toBeLessThan(1);
         const lines = await time.boundingBox();
         // Its download, measured on the journey's time line, and one bar on the screen.
         await emit({
@@ -501,7 +734,8 @@ describe.skipIf(!asked)("the Start screen while OpenBot updates", () => {
         await page
           .getByText("100.0 MB of 944.2 MB", { exact: false })
           .waitFor();
-        expect(await anchors(page)).toEqual(before);
+        await expectCentredLifecycle(page);
+        expect(await anchors(page)).toEqual(updating);
         expect((await time.boundingBox())?.height).toBe(lines?.height);
         expect(await page.getByRole("progressbar").count()).toBe(1);
         // The download ends, and its measure goes.
@@ -514,7 +748,8 @@ describe.skipIf(!asked)("the Start screen while OpenBot updates", () => {
         await page
           .getByText("100.0 MB of 944.2 MB", { exact: false })
           .waitFor({ state: "hidden" });
-        expect(await anchors(page)).toEqual(before);
+        await expectCentredLifecycle(page);
+        expect(await anchors(page)).toEqual(updating);
         // Its download done, the update is on to installing what it downloaded.
         expect(await said.textContent()).toBe("Installing the update");
       } finally {

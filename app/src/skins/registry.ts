@@ -1,17 +1,13 @@
-import { appConfig } from "@/lib/generated/application-config";
 import { opendots } from "./opendots";
 import { openduet } from "./openduet";
 import { openmuse } from "./openmuse";
 import { useSkinId } from "./store";
 import type { Skin, SkinId } from "./types";
 
-/*
- * The default is the product as `brand.yaml` names it, so a deployment that renames OpenBot sees
- * its own name here too. The description says nothing a rename could make untrue.
- */
+/** The appearance has its own name; the saved default id and product name stay unchanged. */
 const openbot: Skin = {
   id: "openbot",
-  name: appConfig.brand.productName,
+  name: "CopilotKit",
   description: "The standard look, with your conversations in a sidebar.",
   botLook: "orb",
 };

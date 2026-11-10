@@ -903,16 +903,22 @@ test("puts the server beside the database and the Bots, and the worker beside th
   );
 });
 
-test("hands the desktop's host-access token to the server and nothing else", () => {
-  const holders = Object.entries(composeServices())
-    .filter(([, service]) =>
-      Object.keys(service.environment ?? {}).includes(
-        "OPENBOT_DESKTOP_HOST_TOKEN",
-      ),
-    )
-    .map(([name]) => name);
+test("hands the desktop's host identity to the server and nothing else", () => {
+  for (const variable of [
+    "OPENBOT_DESKTOP_HOST_TOKEN",
+    "OPENBOT_DESKTOP_INSTALLATION_ID",
+  ]) {
+    const holders = Object.entries(composeServices())
+      .filter(([, service]) =>
+        Object.keys(service.environment ?? {}).includes(variable),
+      )
+      .map(([name]) => name);
 
-  expect(holders).toEqual(["server"]);
+    expect(holders).toEqual(["server"]);
+    expect(composeServices().server?.environment?.[variable]).toBe(
+      `\${${variable}:-}`,
+    );
+  }
 });
 
 test("addresses the server's Bots and endpoints from inside the network", () => {

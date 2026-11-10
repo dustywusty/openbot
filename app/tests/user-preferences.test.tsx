@@ -8,8 +8,14 @@ import {
 } from "bun:test";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 import type { UserPreferences } from "@openbot/shared/user-preferences";
+import { DEFAULT_USER_PREFERENCES } from "@openbot/shared/user-preferences";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, render, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import {
+  ChatWidthAccountSync,
+  ChatWidthPreference,
+} from "@/components/settings/chat-width-preference";
 import { MessageListPreference } from "@/components/settings/message-list-preference";
 import { authKeys } from "@/lib/auth/queries";
 import {
@@ -46,7 +52,7 @@ afterEach(() => {
 });
 afterAll(() => GlobalRegistrator.unregister());
 
-function setup() {
+function setup(width = false) {
   const client = new QueryClient({
     defaultOptions: {
       queries: { retry: false, staleTime: Infinity },
@@ -62,7 +68,14 @@ function setup() {
   });
   const view = render(
     <QueryClientProvider client={client}>
-      <MessageListPreference />
+      {width ? (
+        <>
+          <ChatWidthAccountSync />
+          <ChatWidthPreference />
+        </>
+      ) : (
+        <MessageListPreference />
+      )}
     </QueryClientProvider>,
   );
   return { client, view };
@@ -101,6 +114,7 @@ test("successful writes update only the current account cache; failures preserve
     selfHostBannerDismissed: false,
     narration: null,
     skin: "opendots",
+    chatWidth: "comfortable",
     proactive: "on",
   });
   const mutation = client
@@ -113,6 +127,7 @@ test("successful writes update only the current account cache; failures preserve
         selfHostBannerDismissed: false,
         narration: null,
         skin: "openbot",
+        chatWidth: "comfortable",
         proactive: "on",
       },
     });
@@ -130,6 +145,7 @@ test("successful writes update only the current account cache; failures preserve
     selfHostBannerDismissed: false,
     narration: null,
     skin: "opendots",
+    chatWidth: "comfortable",
     proactive: "on",
   });
   response = async () =>
@@ -146,6 +162,43 @@ test("successful writes update only the current account cache; failures preserve
     selfHostBannerDismissed: false,
     narration: null,
     skin: "openbot",
+    chatWidth: "comfortable",
     proactive: "on",
   });
+});
+
+test("chat width loads and saves the account choice, updates chat layout, and clears on unmount", async () => {
+  response = async () =>
+    Response.json({
+      preferences: { ...DEFAULT_USER_PREFERENCES, chatWidth: "wide" },
+    });
+  const { client, view } = setup(true);
+  await view.findByText("Wide");
+  await waitFor(() =>
+    expect(document.documentElement.dataset.chatWidth).toBe("wide"),
+  );
+  const user = userEvent.setup({ document });
+  await user.click(view.getByRole("combobox", { name: "Chat width" }));
+  response = async () =>
+    Response.json({
+      preferences: { ...DEFAULT_USER_PREFERENCES, chatWidth: "full" },
+    });
+  await user.click(await view.findByRole("option", { name: "Full" }));
+  await waitFor(() =>
+    expect(document.documentElement.dataset.chatWidth).toBe("full"),
+  );
+  expect(requests.at(-1)).toMatchObject({
+    method: "PATCH",
+    body: JSON.stringify({ chatWidth: "full" }),
+  });
+  expect(
+    client.getQueryData<UserPreferences>(
+      userPreferencesQueryOptions("alice").queryKey,
+    )?.chatWidth,
+  ).toBe("full");
+  expect(
+    client.getQueryData(userPreferencesQueryOptions("bob").queryKey),
+  ).toBeUndefined();
+  view.unmount();
+  expect(document.documentElement.dataset.chatWidth).toBeUndefined();
 });

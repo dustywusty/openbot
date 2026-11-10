@@ -1,4 +1,5 @@
 import { declaredHarness } from "@openbot/shared/harnesses";
+import { parseWorkspaceBot } from "@openbot/shared/workspace-bot";
 import { and, eq, isNotNull, isNull, or, sql } from "drizzle-orm";
 import { capabilityRefusal } from "../admin/capabilities";
 import type { CredentialStore } from "../credentials";
@@ -275,7 +276,18 @@ function mapProfile(
     // Whether a key is set, never which. The form needs to show "a key is set" so a person does not
     // wipe one by saving an unrelated edit; showing the value would put a secret in a screenshot.
     hasAuth: authFromConfiguration(row.configuration) !== null,
+    computerId: computerIdOf(row.configuration),
     instructions: starterInstructionsOf(row),
+    personalStarter:
+      (row.configuration as { personalStarter?: boolean } | null)
+        ?.personalStarter === true,
+    ...((row.configuration as Record<string, unknown> | null)?.workspaceBot
+      ? {
+          workspaceBot: parseWorkspaceBot(
+            (row.configuration as Record<string, unknown>).workspaceBot,
+          ),
+        }
+      : {}),
     ...frameworkField(row),
   };
 }
@@ -285,6 +297,15 @@ function frameworkField(row: {
   type: "built_in" | "remote_ag_ui" | "remote_mastra";
   configuration: unknown;
 }): { framework?: string } {
+  const workspace = (row.configuration as Record<string, unknown> | null)
+    ?.workspaceBot;
+  if (workspace)
+    return {
+      framework:
+        parseWorkspaceBot(workspace).runtime === "codex"
+          ? "Codex"
+          : "Claude Code",
+    };
   const framework = frameworkOf(row);
   return framework ? { framework } : {};
 }
@@ -319,6 +340,18 @@ function starterInstructionsOf(row: {
  * convert an external agent back into the built-in one. That failure is silent and total: the Bot
  * keeps working, so nothing looks broken, and it is simply no longer their agent.
  */
+function computerIdOf(configuration: unknown): string | null {
+  if (!configuration || typeof configuration !== "object") return null;
+  const entry = configuration as Record<string, unknown>;
+  const id =
+    entry.computerId ??
+    (entry.workspaceBot as { workspaceId?: unknown } | null)?.workspaceId;
+  if (id === undefined || id === null) return null;
+  if (typeof id !== "string" || !/^obw-[a-f0-9]{16}$/.test(id))
+    throw new Error("This Bot has an invalid desktop Computer assignment.");
+  return id;
+}
+
 function endpointOf(configuration: unknown): string | null {
   if (!configuration || typeof configuration !== "object") return null;
   const endpoint = (configuration as { endpoint?: unknown }).endpoint;
@@ -411,8 +444,23 @@ export function runForDuplicate(
   managed: Record<string, unknown> | undefined,
 ): AgentRun | null {
   const systemPrompt = promptOf(source.configuration, "systemPrompt");
+  const computerId = computerIdOf(source.configuration);
+  const workspaceBot = (source.configuration as Record<string, unknown> | null)
+    ?.workspaceBot;
+  if (workspaceBot && systemPrompt)
+    return {
+      type: "built_in",
+      configuration: {
+        systemPrompt,
+        workspaceBot: parseWorkspaceBot(workspaceBot),
+        ...(computerId ? { computerId } : {}),
+      },
+    };
   if (source.type === "built_in" && systemPrompt) {
-    return { type: "built_in", configuration: { systemPrompt } };
+    return {
+      type: "built_in",
+      configuration: { systemPrompt, ...(computerId ? { computerId } : {}) },
+    };
   }
 
   const endpoint = endpointOf(source.configuration);
@@ -444,6 +492,7 @@ export function runForDuplicate(
     return {
       type: source.type === "remote_mastra" ? "remote_mastra" : "remote_ag_ui",
       configuration: {
+        ...(computerId ? { computerId } : {}),
         endpoint,
         ...(remoteAgentId ? { remoteAgentId } : {}),
         ...(standingInstructions ? { standingInstructions } : {}),
@@ -554,6 +603,12 @@ export function createAgentProfileStore(
    * agent with a key then simply cannot be created, which is better than storing it in the clear.
    */
   vault?: { store: CredentialStore; encryptionKey: string },
+  desktop?: {
+    desktopComputerOwned: (
+      actor: AgentActor,
+      computerId: string,
+    ) => Promise<boolean>;
+  },
 ): AgentProfileStore {
   const managedConfiguration = managedAgentAgUiUrl
     ? { endpoint: managedAgentAgUiUrl.toString() }
@@ -584,13 +639,39 @@ export function createAgentProfileStore(
 
     async create(actor, input) {
       if (input.isolated === true) await requireMayIsolate(actor);
+      const computerId = input.computerId ?? input.workspaceBot?.workspaceId;
+      if (
+        input.computerId &&
+        input.workspaceBot &&
+        input.computerId !== input.workspaceBot.workspaceId
+      )
+        throw new AgentNotManageableError("desktop-computer");
+      if (
+        computerId &&
+        (input.visibility !== "private" ||
+          input.endpoint ||
+          !/^obw-[a-f0-9]{16}$/.test(computerId) ||
+          !(await desktop?.desktopComputerOwned(actor, computerId)))
+      )
+        throw new AgentNotManageableError("desktop-computer");
       return database.transaction(async (transaction) => {
         const id = newAgentId();
         const endpoint = input.endpoint
           ? { endpoint: input.endpoint }
           : managedConfiguration;
         const systemPrompt = input.systemPrompt?.trim();
-        if (endpoint) {
+        if (input.workspaceBot) {
+          await transaction.insert(agents).values({
+            id,
+            name: input.name,
+            type: "built_in",
+            configuration: {
+              systemPrompt: input.roleDescription,
+              workspaceBot: input.workspaceBot,
+              ...(computerId ? { computerId } : {}),
+            },
+          });
+        } else if (endpoint) {
           await transaction.insert(agents).values({
             id,
             name: input.name,
@@ -603,6 +684,7 @@ export function createAgentProfileStore(
             // auth-header.ts for why a bearer token must not sit next to the endpoint.
             configuration: {
               ...endpoint,
+              ...(computerId ? { computerId } : {}),
               // The framework they named, for an address they gave. See `frameworkOf`.
               ...(input.endpoint && input.harness
                 ? { harness: input.harness }
@@ -635,7 +717,10 @@ export function createAgentProfileStore(
             id,
             name: input.name,
             type: "built_in",
-            configuration: { systemPrompt },
+            configuration: {
+              systemPrompt,
+              ...(computerId ? { computerId } : {}),
+            },
           });
         } else {
           /*
@@ -700,6 +785,55 @@ export function createAgentProfileStore(
             string,
             unknown
           >;
+          const previousComputer = computerIdOf(previous);
+          const nativeComputer =
+            input.workspaceBot?.workspaceId ??
+            (input.workspaceBot === null
+              ? null
+              : (previous.workspaceBot as { workspaceId?: string } | null)
+                  ?.workspaceId);
+          const computerId =
+            input.computerId === undefined
+              ? (nativeComputer ?? previousComputer)
+              : input.computerId;
+          if (nativeComputer && computerId !== nativeComputer)
+            throw new AgentNotManageableError(id);
+          if (
+            input.computerId !== undefined &&
+            (profile.ownerUserId !== actor.id ||
+              profile.systemOwned ||
+              previous.personalStarter === true ||
+              (profile.endpoint !== null &&
+                (!managedAgentAgUiUrl ||
+                  !sameAddress(
+                    profile.endpoint,
+                    managedAgentAgUiUrl.toString(),
+                  ))))
+          )
+            throw new AgentNotManageableError(id);
+          if (
+            computerId &&
+            (profile.ownerUserId !== actor.id ||
+              input.visibility !== "private" ||
+              (input.endpoint &&
+                !sameAddress(input.endpoint, profile.endpoint)) ||
+              !/^obw-[a-f0-9]{16}$/.test(computerId) ||
+              !(await desktop?.desktopComputerOwned(actor, computerId)))
+          )
+            throw new AgentNotManageableError(id);
+          if (
+            input.workspaceBot &&
+            (profile.ownerUserId !== actor.id ||
+              profile.systemOwned ||
+              previous.personalStarter === true ||
+              row?.type !== "built_in")
+          )
+            throw new AgentNotManageableError(id);
+          if (
+            (input.workspaceBot || previous.workspaceBot) &&
+            input.visibility !== "private"
+          )
+            throw new AgentNotManageableError(id);
           /**
            * A coworker that runs here runs on its role description, so editing one has to move both.
            *
@@ -737,6 +871,12 @@ export function createAgentProfileStore(
             !sameAddress(input.endpoint, profile.endpoint);
           const configuration: Record<string, unknown> = {
             ...previous,
+            ...(input.workspaceBot === undefined
+              ? {}
+              : { workspaceBot: input.workspaceBot }),
+            ...(input.computerId === undefined && !input.workspaceBot
+              ? {}
+              : { computerId }),
             ...(!starter && row?.type === "built_in" && described
               ? { systemPrompt: input.roleDescription }
               : {}),
@@ -846,6 +986,12 @@ export function createAgentProfileStore(
         if (!run) {
           throw new ManagedAgentUnavailableError();
         }
+        const assignedComputer = computerIdOf(run.configuration);
+        if (
+          assignedComputer &&
+          !(await desktop?.desktopComputerOwned(actor, assignedComputer))
+        )
+          throw new AgentNotManageableError(id);
         const duplicateId = newAgentId();
         await transaction.insert(agents).values({
           id: duplicateId,

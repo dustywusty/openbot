@@ -239,7 +239,7 @@ export function createHeadlessComputerTools(options: {
     ),
     tool(
       "computer_run_command",
-      "Run a bash shell command in your workspace. Pipes and && work; long output is truncated and long commands are stopped. For package installation check id -u first: as root (0), use apt-get directly; otherwise use sudo openbot-apt update && sudo openbot-apt install <package>, which takes package names and nothing else, not sudo apt-get. If installation is refused, say so rather than retrying.",
+      "Run a bash shell command on your assigned Computer in its project folder. Pipes and && work; long output is bounded and commands can be stopped. Check the installed OS and id -u before installing packages. On OpenBot's default browser computer, non-root installs use sudo openbot-apt update && sudo openbot-apt install <package>; a desktop Debian Computer uses its configured package tools. If installation is refused, say so rather than retrying.",
       z.strictObject({ command: text }),
       async (input, { signal }) => ({
         ok: true,

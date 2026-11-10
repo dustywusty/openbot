@@ -97,13 +97,6 @@ export const SETTINGS_SIDEBAR_ITEMS: SettingsSidebarItem[] = [
     linkOptions: { to: "/settings/passwords" },
   },
   {
-    /* What OpenBot runs here and the memory it takes, with Restart and Stop. */
-    title: "This computer",
-    icon: IconDeviceDesktop,
-    desktopOnly: true,
-    linkOptions: { to: "/settings/this-computer" },
-  },
-  {
     /* The same mark Admin gives UI Components. It is the same subject seen from the other side. */
     title: "Components gallery",
     icon: IconLayoutGrid,
@@ -129,9 +122,9 @@ const PERSONAL_SETTINGS_SIDEBAR_ITEMS: SettingsSidebarItem[] = [
     linkOptions: { to: "/settings/skills" },
   },
   {
-    title: "Computer",
+    title: "Computers",
     icon: IconDeviceDesktop,
-    linkOptions: { to: "/settings/computer" },
+    linkOptions: { to: "/computers" },
   },
   {
     title: managePaths("personal").auditLabel,

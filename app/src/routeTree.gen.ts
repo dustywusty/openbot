@@ -27,6 +27,7 @@ import { Route as AuthedAppResponsibilitiesRouteImport } from './routes/_authed/
 import { Route as AuthedAppRoutinesRouteImport } from './routes/_authed/_app/routines'
 import { Route as AuthedAppSkillsRouteImport } from './routes/_authed/_app/skills'
 import { Route as AuthedAppTeamBotsRouteImport } from './routes/_authed/_app/team-bots'
+import { Route as AuthedAppWorkspacesRouteImport } from './routes/_authed/_app/workspaces'
 import { Route as AuthedAdminIndexRouteImport } from './routes/_authed/admin/index'
 import { Route as AuthedAdminApprovalsRouteImport } from './routes/_authed/admin/approvals'
 import { Route as AuthedAdminAuditRouteImport } from './routes/_authed/admin/audit'
@@ -61,6 +62,10 @@ import { Route as AuthedAppCapabilitiesMemoryRouteImport } from './routes/_authe
 import { Route as AuthedAppCapabilitiesSkillsRouteImport } from './routes/_authed/_app/capabilities.skills'
 import { Route as AuthedAppChannelChannelIdRouteImport } from './routes/_authed/_app/channel/$channelId'
 import { Route as AuthedAppChannelNewRouteImport } from './routes/_authed/_app/channel/new'
+import { Route as AuthedAppComputersIndexRouteImport } from './routes/_authed/_app/computers.index'
+import { Route as AuthedAppComputersComputerIdRouteImport } from './routes/_authed/_app/computers.$computerId'
+import { Route as AuthedAppComputersHomeRouteImport } from './routes/_authed/_app/computers_.home'
+import { Route as AuthedAppComputersNewRouteImport } from './routes/_authed/_app/computers_.new'
 import { Route as AuthedAppConnectionsIndexRouteImport } from './routes/_authed/_app/connections.index'
 import { Route as AuthedAppConnectionsKeyRouteImport } from './routes/_authed/_app/connections.$key'
 import { Route as AuthedAppGroupChannelIdRouteImport } from './routes/_authed/_app/group/$channelId'
@@ -100,6 +105,7 @@ import { Route as AuthedAppBotsAgentIdResponsibilitiesRouteImport } from './rout
 import { Route as AuthedAppBotsAgentIdRoutinesRouteImport } from './routes/_authed/_app/bots.$agentId.routines'
 import { Route as AuthedAppBotsAgentIdSetupRouteImport } from './routes/_authed/_app/bots.$agentId.setup'
 import { Route as AuthedAppBotsAgentIdSharingRouteImport } from './routes/_authed/_app/bots.$agentId.sharing'
+import { Route as AuthedAppComputersComputerIdNewBotRouteImport } from './routes/_authed/_app/computers_.$computerId.new-bot'
 import { Route as AuthedAppConnectionsBrowseArcadeRouteImport } from './routes/_authed/_app/connections.browse.arcade'
 import { Route as AuthedAppConnectionsBrowseComposioRouteImport } from './routes/_authed/_app/connections.browse.composio'
 import { Route as AuthedSettingsPersonalCredentialsNewRouteImport } from './routes/_authed/settings/_personal/credentials_.new'
@@ -198,6 +204,11 @@ const AuthedAppSkillsRoute = AuthedAppSkillsRouteImport.update({
 const AuthedAppTeamBotsRoute = AuthedAppTeamBotsRouteImport.update({
   id: '/team-bots',
   path: '/team-bots',
+  getParentRoute: () => AuthedAppRoute,
+} as any)
+const AuthedAppWorkspacesRoute = AuthedAppWorkspacesRouteImport.update({
+  id: '/workspaces',
+  path: '/workspaces',
   getParentRoute: () => AuthedAppRoute,
 } as any)
 const AuthedAdminIndexRoute = AuthedAdminIndexRouteImport.update({
@@ -374,6 +385,27 @@ const AuthedAppChannelChannelIdRoute =
 const AuthedAppChannelNewRoute = AuthedAppChannelNewRouteImport.update({
   id: '/channel/new',
   path: '/channel/new',
+  getParentRoute: () => AuthedAppRoute,
+} as any)
+const AuthedAppComputersIndexRoute = AuthedAppComputersIndexRouteImport.update({
+  id: '/computers/',
+  path: '/computers/',
+  getParentRoute: () => AuthedAppRoute,
+} as any)
+const AuthedAppComputersComputerIdRoute =
+  AuthedAppComputersComputerIdRouteImport.update({
+    id: '/computers/$computerId',
+    path: '/computers/$computerId',
+    getParentRoute: () => AuthedAppRoute,
+  } as any)
+const AuthedAppComputersHomeRoute = AuthedAppComputersHomeRouteImport.update({
+  id: '/computers_/home',
+  path: '/computers/home',
+  getParentRoute: () => AuthedAppRoute,
+} as any)
+const AuthedAppComputersNewRoute = AuthedAppComputersNewRouteImport.update({
+  id: '/computers_/new',
+  path: '/computers/new',
   getParentRoute: () => AuthedAppRoute,
 } as any)
 const AuthedAppConnectionsIndexRoute =
@@ -600,6 +632,12 @@ const AuthedAppBotsAgentIdSharingRoute =
     path: '/bots/$agentId/sharing',
     getParentRoute: () => AuthedAppRoute,
   } as any)
+const AuthedAppComputersComputerIdNewBotRoute =
+  AuthedAppComputersComputerIdNewBotRouteImport.update({
+    id: '/computers_/$computerId/new-bot',
+    path: '/computers/$computerId/new-bot',
+    getParentRoute: () => AuthedAppRoute,
+  } as any)
 const AuthedAppConnectionsBrowseArcadeRoute =
   AuthedAppConnectionsBrowseArcadeRouteImport.update({
     id: '/connections/browse/arcade',
@@ -678,6 +716,7 @@ export interface FileRoutesByFullPath {
   '/routines': typeof AuthedAppRoutinesRoute
   '/skills': typeof AuthedAppSkillsRoute
   '/team-bots': typeof AuthedAppTeamBotsRoute
+  '/workspaces': typeof AuthedAppWorkspacesRoute
   '/admin/approvals': typeof AuthedAdminApprovalsRoute
   '/admin/audit': typeof AuthedAdminAuditRoute
   '/admin/boundaries': typeof AuthedAdminBoundariesRoute
@@ -708,6 +747,9 @@ export interface FileRoutesByFullPath {
   '/capabilities/skills': typeof AuthedAppCapabilitiesSkillsRoute
   '/channel/$channelId': typeof AuthedAppChannelChannelIdRoute
   '/channel/new': typeof AuthedAppChannelNewRoute
+  '/computers/$computerId': typeof AuthedAppComputersComputerIdRoute
+  '/computers/home': typeof AuthedAppComputersHomeRoute
+  '/computers/new': typeof AuthedAppComputersNewRoute
   '/connections/$key': typeof AuthedAppConnectionsKeyRoute
   '/group/$channelId': typeof AuthedAppGroupChannelIdRoute
   '/group/new': typeof AuthedAppGroupNewRoute
@@ -735,6 +777,7 @@ export interface FileRoutesByFullPath {
   '/agents/': typeof AuthedAppAgentsIndexRoute
   '/bots/': typeof AuthedAppBotsIndexRoute
   '/capabilities/': typeof AuthedAppCapabilitiesIndexRoute
+  '/computers/': typeof AuthedAppComputersIndexRoute
   '/connections/': typeof AuthedAppConnectionsIndexRoute
   '/admin/components/': typeof AuthedAdminComponentsIndexRoute
   '/admin/plugins/': typeof AuthedAdminPluginsIndexRoute
@@ -749,6 +792,7 @@ export interface FileRoutesByFullPath {
   '/bots/$agentId/routines': typeof AuthedAppBotsAgentIdRoutinesRoute
   '/bots/$agentId/setup': typeof AuthedAppBotsAgentIdSetupRoute
   '/bots/$agentId/sharing': typeof AuthedAppBotsAgentIdSharingRoute
+  '/computers/$computerId/new-bot': typeof AuthedAppComputersComputerIdNewBotRoute
   '/connections/browse/arcade': typeof AuthedAppConnectionsBrowseArcadeRoute
   '/connections/browse/composio': typeof AuthedAppConnectionsBrowseComposioRoute
   '/settings/credentials/new': typeof AuthedSettingsPersonalCredentialsNewRoute
@@ -775,6 +819,7 @@ export interface FileRoutesByTo {
   '/routines': typeof AuthedAppRoutinesRoute
   '/skills': typeof AuthedAppSkillsRoute
   '/team-bots': typeof AuthedAppTeamBotsRoute
+  '/workspaces': typeof AuthedAppWorkspacesRoute
   '/admin/approvals': typeof AuthedAdminApprovalsRoute
   '/admin/audit': typeof AuthedAdminAuditRoute
   '/admin/boundaries': typeof AuthedAdminBoundariesRoute
@@ -805,6 +850,9 @@ export interface FileRoutesByTo {
   '/capabilities/skills': typeof AuthedAppCapabilitiesSkillsRoute
   '/channel/$channelId': typeof AuthedAppChannelChannelIdRoute
   '/channel/new': typeof AuthedAppChannelNewRoute
+  '/computers/$computerId': typeof AuthedAppComputersComputerIdRoute
+  '/computers/home': typeof AuthedAppComputersHomeRoute
+  '/computers/new': typeof AuthedAppComputersNewRoute
   '/connections/$key': typeof AuthedAppConnectionsKeyRoute
   '/group/$channelId': typeof AuthedAppGroupChannelIdRoute
   '/group/new': typeof AuthedAppGroupNewRoute
@@ -832,6 +880,7 @@ export interface FileRoutesByTo {
   '/agents': typeof AuthedAppAgentsIndexRoute
   '/bots': typeof AuthedAppBotsIndexRoute
   '/capabilities': typeof AuthedAppCapabilitiesIndexRoute
+  '/computers': typeof AuthedAppComputersIndexRoute
   '/connections': typeof AuthedAppConnectionsIndexRoute
   '/admin/components': typeof AuthedAdminComponentsIndexRoute
   '/admin/plugins': typeof AuthedAdminPluginsIndexRoute
@@ -846,6 +895,7 @@ export interface FileRoutesByTo {
   '/bots/$agentId/routines': typeof AuthedAppBotsAgentIdRoutinesRoute
   '/bots/$agentId/setup': typeof AuthedAppBotsAgentIdSetupRoute
   '/bots/$agentId/sharing': typeof AuthedAppBotsAgentIdSharingRoute
+  '/computers/$computerId/new-bot': typeof AuthedAppComputersComputerIdNewBotRoute
   '/connections/browse/arcade': typeof AuthedAppConnectionsBrowseArcadeRoute
   '/connections/browse/composio': typeof AuthedAppConnectionsBrowseComposioRoute
   '/settings/credentials/new': typeof AuthedSettingsPersonalCredentialsNewRoute
@@ -877,6 +927,7 @@ export interface FileRoutesById {
   '/_authed/_app/routines': typeof AuthedAppRoutinesRoute
   '/_authed/_app/skills': typeof AuthedAppSkillsRoute
   '/_authed/_app/team-bots': typeof AuthedAppTeamBotsRoute
+  '/_authed/_app/workspaces': typeof AuthedAppWorkspacesRoute
   '/_authed/admin/approvals': typeof AuthedAdminApprovalsRoute
   '/_authed/admin/audit': typeof AuthedAdminAuditRoute
   '/_authed/admin/boundaries': typeof AuthedAdminBoundariesRoute
@@ -909,6 +960,9 @@ export interface FileRoutesById {
   '/_authed/_app/capabilities/skills': typeof AuthedAppCapabilitiesSkillsRoute
   '/_authed/_app/channel/$channelId': typeof AuthedAppChannelChannelIdRoute
   '/_authed/_app/channel/new': typeof AuthedAppChannelNewRoute
+  '/_authed/_app/computers/$computerId': typeof AuthedAppComputersComputerIdRoute
+  '/_authed/_app/computers_/home': typeof AuthedAppComputersHomeRoute
+  '/_authed/_app/computers_/new': typeof AuthedAppComputersNewRoute
   '/_authed/_app/connections/$key': typeof AuthedAppConnectionsKeyRoute
   '/_authed/_app/group/$channelId': typeof AuthedAppGroupChannelIdRoute
   '/_authed/_app/group/new': typeof AuthedAppGroupNewRoute
@@ -936,6 +990,7 @@ export interface FileRoutesById {
   '/_authed/_app/agents/': typeof AuthedAppAgentsIndexRoute
   '/_authed/_app/bots/': typeof AuthedAppBotsIndexRoute
   '/_authed/_app/capabilities/': typeof AuthedAppCapabilitiesIndexRoute
+  '/_authed/_app/computers/': typeof AuthedAppComputersIndexRoute
   '/_authed/_app/connections/': typeof AuthedAppConnectionsIndexRoute
   '/_authed/admin/components/': typeof AuthedAdminComponentsIndexRoute
   '/_authed/admin/plugins/': typeof AuthedAdminPluginsIndexRoute
@@ -950,6 +1005,7 @@ export interface FileRoutesById {
   '/_authed/_app/bots/$agentId/routines': typeof AuthedAppBotsAgentIdRoutinesRoute
   '/_authed/_app/bots/$agentId/setup': typeof AuthedAppBotsAgentIdSetupRoute
   '/_authed/_app/bots/$agentId/sharing': typeof AuthedAppBotsAgentIdSharingRoute
+  '/_authed/_app/computers_/$computerId/new-bot': typeof AuthedAppComputersComputerIdNewBotRoute
   '/_authed/_app/connections/browse/arcade': typeof AuthedAppConnectionsBrowseArcadeRoute
   '/_authed/_app/connections/browse/composio': typeof AuthedAppConnectionsBrowseComposioRoute
   '/_authed/settings/_personal/credentials_/new': typeof AuthedSettingsPersonalCredentialsNewRoute
@@ -981,6 +1037,7 @@ export interface FileRouteTypes {
     | '/routines'
     | '/skills'
     | '/team-bots'
+    | '/workspaces'
     | '/admin/approvals'
     | '/admin/audit'
     | '/admin/boundaries'
@@ -1011,6 +1068,9 @@ export interface FileRouteTypes {
     | '/capabilities/skills'
     | '/channel/$channelId'
     | '/channel/new'
+    | '/computers/$computerId'
+    | '/computers/home'
+    | '/computers/new'
     | '/connections/$key'
     | '/group/$channelId'
     | '/group/new'
@@ -1038,6 +1098,7 @@ export interface FileRouteTypes {
     | '/agents/'
     | '/bots/'
     | '/capabilities/'
+    | '/computers/'
     | '/connections/'
     | '/admin/components/'
     | '/admin/plugins/'
@@ -1052,6 +1113,7 @@ export interface FileRouteTypes {
     | '/bots/$agentId/routines'
     | '/bots/$agentId/setup'
     | '/bots/$agentId/sharing'
+    | '/computers/$computerId/new-bot'
     | '/connections/browse/arcade'
     | '/connections/browse/composio'
     | '/settings/credentials/new'
@@ -1078,6 +1140,7 @@ export interface FileRouteTypes {
     | '/routines'
     | '/skills'
     | '/team-bots'
+    | '/workspaces'
     | '/admin/approvals'
     | '/admin/audit'
     | '/admin/boundaries'
@@ -1108,6 +1171,9 @@ export interface FileRouteTypes {
     | '/capabilities/skills'
     | '/channel/$channelId'
     | '/channel/new'
+    | '/computers/$computerId'
+    | '/computers/home'
+    | '/computers/new'
     | '/connections/$key'
     | '/group/$channelId'
     | '/group/new'
@@ -1135,6 +1201,7 @@ export interface FileRouteTypes {
     | '/agents'
     | '/bots'
     | '/capabilities'
+    | '/computers'
     | '/connections'
     | '/admin/components'
     | '/admin/plugins'
@@ -1149,6 +1216,7 @@ export interface FileRouteTypes {
     | '/bots/$agentId/routines'
     | '/bots/$agentId/setup'
     | '/bots/$agentId/sharing'
+    | '/computers/$computerId/new-bot'
     | '/connections/browse/arcade'
     | '/connections/browse/composio'
     | '/settings/credentials/new'
@@ -1179,6 +1247,7 @@ export interface FileRouteTypes {
     | '/_authed/_app/routines'
     | '/_authed/_app/skills'
     | '/_authed/_app/team-bots'
+    | '/_authed/_app/workspaces'
     | '/_authed/admin/approvals'
     | '/_authed/admin/audit'
     | '/_authed/admin/boundaries'
@@ -1211,6 +1280,9 @@ export interface FileRouteTypes {
     | '/_authed/_app/capabilities/skills'
     | '/_authed/_app/channel/$channelId'
     | '/_authed/_app/channel/new'
+    | '/_authed/_app/computers/$computerId'
+    | '/_authed/_app/computers_/home'
+    | '/_authed/_app/computers_/new'
     | '/_authed/_app/connections/$key'
     | '/_authed/_app/group/$channelId'
     | '/_authed/_app/group/new'
@@ -1238,6 +1310,7 @@ export interface FileRouteTypes {
     | '/_authed/_app/agents/'
     | '/_authed/_app/bots/'
     | '/_authed/_app/capabilities/'
+    | '/_authed/_app/computers/'
     | '/_authed/_app/connections/'
     | '/_authed/admin/components/'
     | '/_authed/admin/plugins/'
@@ -1252,6 +1325,7 @@ export interface FileRouteTypes {
     | '/_authed/_app/bots/$agentId/routines'
     | '/_authed/_app/bots/$agentId/setup'
     | '/_authed/_app/bots/$agentId/sharing'
+    | '/_authed/_app/computers_/$computerId/new-bot'
     | '/_authed/_app/connections/browse/arcade'
     | '/_authed/_app/connections/browse/composio'
     | '/_authed/settings/_personal/credentials_/new'
@@ -1396,6 +1470,13 @@ declare module '@tanstack/react-router' {
       path: '/team-bots'
       fullPath: '/team-bots'
       preLoaderRoute: typeof AuthedAppTeamBotsRouteImport
+      parentRoute: typeof AuthedAppRoute
+    }
+    '/_authed/_app/workspaces': {
+      id: '/_authed/_app/workspaces'
+      path: '/workspaces'
+      fullPath: '/workspaces'
+      preLoaderRoute: typeof AuthedAppWorkspacesRouteImport
       parentRoute: typeof AuthedAppRoute
     }
     '/_authed/admin/': {
@@ -1634,6 +1715,34 @@ declare module '@tanstack/react-router' {
       path: '/channel/new'
       fullPath: '/channel/new'
       preLoaderRoute: typeof AuthedAppChannelNewRouteImport
+      parentRoute: typeof AuthedAppRoute
+    }
+    '/_authed/_app/computers/': {
+      id: '/_authed/_app/computers/'
+      path: '/computers'
+      fullPath: '/computers/'
+      preLoaderRoute: typeof AuthedAppComputersIndexRouteImport
+      parentRoute: typeof AuthedAppRoute
+    }
+    '/_authed/_app/computers/$computerId': {
+      id: '/_authed/_app/computers/$computerId'
+      path: '/computers/$computerId'
+      fullPath: '/computers/$computerId'
+      preLoaderRoute: typeof AuthedAppComputersComputerIdRouteImport
+      parentRoute: typeof AuthedAppRoute
+    }
+    '/_authed/_app/computers_/home': {
+      id: '/_authed/_app/computers_/home'
+      path: '/computers/home'
+      fullPath: '/computers/home'
+      preLoaderRoute: typeof AuthedAppComputersHomeRouteImport
+      parentRoute: typeof AuthedAppRoute
+    }
+    '/_authed/_app/computers_/new': {
+      id: '/_authed/_app/computers_/new'
+      path: '/computers/new'
+      fullPath: '/computers/new'
+      preLoaderRoute: typeof AuthedAppComputersNewRouteImport
       parentRoute: typeof AuthedAppRoute
     }
     '/_authed/_app/connections/': {
@@ -1909,6 +2018,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedAppBotsAgentIdSharingRouteImport
       parentRoute: typeof AuthedAppRoute
     }
+    '/_authed/_app/computers_/$computerId/new-bot': {
+      id: '/_authed/_app/computers_/$computerId/new-bot'
+      path: '/computers/$computerId/new-bot'
+      fullPath: '/computers/$computerId/new-bot'
+      preLoaderRoute: typeof AuthedAppComputersComputerIdNewBotRouteImport
+      parentRoute: typeof AuthedAppRoute
+    }
     '/_authed/_app/connections/browse/arcade': {
       id: '/_authed/_app/connections/browse/arcade'
       path: '/connections/browse/arcade'
@@ -2156,9 +2272,13 @@ interface AuthedAppRouteChildren {
   AuthedAppRoutinesRoute: typeof AuthedAppRoutinesRoute
   AuthedAppSkillsRoute: typeof AuthedAppSkillsRoute
   AuthedAppTeamBotsRoute: typeof AuthedAppTeamBotsRoute
+  AuthedAppWorkspacesRoute: typeof AuthedAppWorkspacesRoute
   AuthedAppIndexRoute: typeof AuthedAppIndexRoute
   AuthedAppChannelChannelIdRoute: typeof AuthedAppChannelChannelIdRoute
   AuthedAppChannelNewRoute: typeof AuthedAppChannelNewRoute
+  AuthedAppComputersComputerIdRoute: typeof AuthedAppComputersComputerIdRoute
+  AuthedAppComputersHomeRoute: typeof AuthedAppComputersHomeRoute
+  AuthedAppComputersNewRoute: typeof AuthedAppComputersNewRoute
   AuthedAppConnectionsKeyRoute: typeof AuthedAppConnectionsKeyRoute
   AuthedAppGroupChannelIdRoute: typeof AuthedAppGroupChannelIdRoute
   AuthedAppGroupNewRoute: typeof AuthedAppGroupNewRoute
@@ -2167,6 +2287,7 @@ interface AuthedAppRouteChildren {
   AuthedAppStartStartIdRoute: typeof AuthedAppStartStartIdRoute
   AuthedAppAgentsIndexRoute: typeof AuthedAppAgentsIndexRoute
   AuthedAppBotsIndexRoute: typeof AuthedAppBotsIndexRoute
+  AuthedAppComputersIndexRoute: typeof AuthedAppComputersIndexRoute
   AuthedAppConnectionsIndexRoute: typeof AuthedAppConnectionsIndexRoute
   AuthedAppBotsAgentIdAccessRoute: typeof AuthedAppBotsAgentIdAccessRoute
   AuthedAppBotsAgentIdActivityRoute: typeof AuthedAppBotsAgentIdActivityRoute
@@ -2177,6 +2298,7 @@ interface AuthedAppRouteChildren {
   AuthedAppBotsAgentIdRoutinesRoute: typeof AuthedAppBotsAgentIdRoutinesRoute
   AuthedAppBotsAgentIdSetupRoute: typeof AuthedAppBotsAgentIdSetupRoute
   AuthedAppBotsAgentIdSharingRoute: typeof AuthedAppBotsAgentIdSharingRoute
+  AuthedAppComputersComputerIdNewBotRoute: typeof AuthedAppComputersComputerIdNewBotRoute
   AuthedAppConnectionsBrowseArcadeRoute: typeof AuthedAppConnectionsBrowseArcadeRoute
   AuthedAppConnectionsBrowseComposioRoute: typeof AuthedAppConnectionsBrowseComposioRoute
   AuthedAppBotsAgentIdIndexRoute: typeof AuthedAppBotsAgentIdIndexRoute
@@ -2195,9 +2317,13 @@ const AuthedAppRouteChildren: AuthedAppRouteChildren = {
   AuthedAppRoutinesRoute: AuthedAppRoutinesRoute,
   AuthedAppSkillsRoute: AuthedAppSkillsRoute,
   AuthedAppTeamBotsRoute: AuthedAppTeamBotsRoute,
+  AuthedAppWorkspacesRoute: AuthedAppWorkspacesRoute,
   AuthedAppIndexRoute: AuthedAppIndexRoute,
   AuthedAppChannelChannelIdRoute: AuthedAppChannelChannelIdRoute,
   AuthedAppChannelNewRoute: AuthedAppChannelNewRoute,
+  AuthedAppComputersComputerIdRoute: AuthedAppComputersComputerIdRoute,
+  AuthedAppComputersHomeRoute: AuthedAppComputersHomeRoute,
+  AuthedAppComputersNewRoute: AuthedAppComputersNewRoute,
   AuthedAppConnectionsKeyRoute: AuthedAppConnectionsKeyRoute,
   AuthedAppGroupChannelIdRoute: AuthedAppGroupChannelIdRoute,
   AuthedAppGroupNewRoute: AuthedAppGroupNewRoute,
@@ -2206,6 +2332,7 @@ const AuthedAppRouteChildren: AuthedAppRouteChildren = {
   AuthedAppStartStartIdRoute: AuthedAppStartStartIdRoute,
   AuthedAppAgentsIndexRoute: AuthedAppAgentsIndexRoute,
   AuthedAppBotsIndexRoute: AuthedAppBotsIndexRoute,
+  AuthedAppComputersIndexRoute: AuthedAppComputersIndexRoute,
   AuthedAppConnectionsIndexRoute: AuthedAppConnectionsIndexRoute,
   AuthedAppBotsAgentIdAccessRoute: AuthedAppBotsAgentIdAccessRoute,
   AuthedAppBotsAgentIdActivityRoute: AuthedAppBotsAgentIdActivityRoute,
@@ -2217,6 +2344,8 @@ const AuthedAppRouteChildren: AuthedAppRouteChildren = {
   AuthedAppBotsAgentIdRoutinesRoute: AuthedAppBotsAgentIdRoutinesRoute,
   AuthedAppBotsAgentIdSetupRoute: AuthedAppBotsAgentIdSetupRoute,
   AuthedAppBotsAgentIdSharingRoute: AuthedAppBotsAgentIdSharingRoute,
+  AuthedAppComputersComputerIdNewBotRoute:
+    AuthedAppComputersComputerIdNewBotRoute,
   AuthedAppConnectionsBrowseArcadeRoute: AuthedAppConnectionsBrowseArcadeRoute,
   AuthedAppConnectionsBrowseComposioRoute:
     AuthedAppConnectionsBrowseComposioRoute,

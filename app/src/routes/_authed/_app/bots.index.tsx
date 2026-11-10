@@ -1,7 +1,20 @@
-import { IconBook, IconChevronRight, IconPlus } from "@tabler/icons-react";
+import {
+  IconBook,
+  IconChevronRight,
+  IconDots,
+  IconEdit,
+  IconPlus,
+} from "@tabler/icons-react";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { z } from "zod";
+import { useState } from "react";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "@/components/ui/dropdown-menu";
 import { NewBotSheet } from "@/components/agents/new-bot-sheet";
 import { BotRoster } from "@/components/bots/bot-roster";
 import {
@@ -30,6 +43,8 @@ export const Route = createFileRoute("/_authed/_app/bots/")({
 });
 
 function BotsPage() {
+  const [editing, setEditing] = useState(false);
+  const [batchBusy, setBatchBusy] = useState(false);
   const { new: creating } = Route.useSearch();
   const navigate = Route.useNavigate();
   const personal =
@@ -37,16 +52,50 @@ function BotsPage() {
   return (
     <PageShell
       action={
-        <Button
-          render={(props) => (
-            <Link {...props} search={{ new: true }} to="/bots" />
+        <div className="flex items-center gap-2">
+          {editing ? (
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={batchBusy}
+              onClick={() => setEditing(false)}
+            >
+              Done
+            </Button>
+          ) : (
+            <>
+              <Button
+                render={(props) => (
+                  <Link {...props} search={{ new: true }} to="/bots" />
+                )}
+                size="sm"
+                variant="ghost"
+              >
+                <IconPlus />
+                New Bot
+              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  render={
+                    <Button
+                      size="icon-sm"
+                      variant="ghost"
+                      aria-label="Bots actions"
+                    />
+                  }
+                >
+                  <IconDots />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => setEditing(true)}>
+                    <IconEdit />
+                    Edit list
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </>
           )}
-          size="sm"
-          variant="ghost"
-        >
-          <IconPlus />
-          New Bot
-        </Button>
+        </div>
       }
       description={
         personal
@@ -55,7 +104,7 @@ function BotsPage() {
       }
       title="Bots"
     >
-      <BotRoster />
+      <BotRoster editing={editing} onBusyChange={setBatchBusy} />
       {personal ? <WhatYourBotsKnow /> : null}
       <NewBotSheet
         onClose={() => void navigate({ search: {} })}

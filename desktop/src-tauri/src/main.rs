@@ -4,6 +4,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
+mod computer_worker;
 mod desktop_connection;
 mod desktop_host_access;
 mod desktop_page;
@@ -12,6 +13,7 @@ mod desktop_telemetry;
 mod intelligence_bridge;
 mod notice;
 mod outside_links;
+mod workspace_terminal;
 mod zoom;
 
 #[cfg(test)]
@@ -44,6 +46,8 @@ struct Shell {
     update_cancelled: std::sync::atomic::AtomicBool,
     /// Session-only local folder authority; shutdown retires it before stopping the API server.
     host_access: Mutex<Option<host_access::HostAccess>>,
+    /// Outbound-only Computer jobs; authority is paired to this exact server session.
+    computer_worker: Mutex<Option<computer_worker::ComputerWorker>>,
     /// Native Linux engine API owned by this desktop session, kept through Stop/Start.
     #[cfg(target_os = "linux")]
     podman_api: Mutex<engine::local_api::Service>,
@@ -3225,6 +3229,10 @@ async fn start_stack_inner<R: tauri::Runtime>(
         // After the credential store has been written, so the token never is. See where it is
         // minted above.
         secrets.insert("OPENBOT_DESKTOP_HOST_TOKEN".into(), host_token.clone());
+        secrets.insert(
+            "OPENBOT_DESKTOP_INSTALLATION_ID".into(),
+            openbot_desktop_lib::computer_auth::installation_id(&root).map_err(Problem::from)?,
+        );
 
         // Compose's bind mount of the sign-in folder does not create it. Installation made it;
         // made again here in case it went since. See `stack::make_sign_in_folder`.
@@ -3356,6 +3364,7 @@ async fn start_stack_inner<R: tauri::Runtime>(
         })?;
     let broker = start_host_access(&app, &root, ports.server, address, host_token.clone())?;
     *shell.host_access.lock().unwrap() = Some(broker);
+    start_computer_worker(&app, &shell, ports.server, host_token.clone());
     preparation::record_launch(&root, requested_harness.as_ref())?;
     let config = app.path().app_config_dir().map_err(|error| {
         Problem::with(
@@ -3469,6 +3478,42 @@ fn start_host_access<R: tauri::Runtime>(
         std::sync::Arc::new(desktop_host_access::NativeApproval(app.clone())),
     )
     .map_err(|error| Problem::with("Local folder access could not start.", error.to_string()))
+}
+
+fn start_computer_worker<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    shell: &Shell,
+    server_port: u16,
+    token: String,
+) {
+    let Some(root) = shell.root.lock().unwrap().clone() else {
+        return;
+    };
+    if shell
+        .computer_worker
+        .lock()
+        .unwrap()
+        .as_ref()
+        .is_some_and(|worker| worker.is_for(&root, server_port, &token))
+    {
+        return;
+    }
+    let previous = shell.computer_worker.lock().unwrap().take();
+    if let Some(previous) = previous {
+        previous.stop();
+    }
+    let handle = app.clone();
+    let notify = std::sync::Arc::new(move |computer_id: String| {
+        use tauri::Emitter;
+        let _ = handle.emit(
+            "computer-pairing-changed",
+            serde_json::json!({"computerId":computer_id}),
+        );
+    });
+    match computer_worker::ComputerWorker::start(&root, server_port, token, Some(notify)) {
+        Ok(worker) => *shell.computer_worker.lock().unwrap() = Some(worker),
+        Err(_) => log::warn!("[computers] the outbound Computer worker could not start"),
+    }
 }
 
 /// This dedicated command accepts no setting, value, root or policy from the webview.
@@ -4012,6 +4057,9 @@ fn cleanup_host_state<C>(shell: &Shell, root: &Path, cleanup: C) -> Result<usize
 where
     C: FnOnce(&Path) -> Result<usize, Problem>,
 {
+    if let Some(worker) = shell.computer_worker.lock().unwrap().take() {
+        worker.stop();
+    }
     // Also runs for startup replacement and failure recovery, so a retired authorization session
     // cannot leave a job running beside a new server.
     let host_access_result = {
@@ -4880,7 +4928,9 @@ fn build_main_window<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> tauri::Res
     // The window's buttons on the same row as the OpenBot name and + in the sidebar's header, rather
     // than above them (`TRAFFIC_LIGHTS`, and the page's styles that make room beside them).
     #[cfg(target_os = "macos")]
-    let builder = builder.traffic_light_position(TRAFFIC_LIGHTS);
+    let builder = builder
+        .traffic_light_position(TRAFFIC_LIGHTS)
+        .hidden_title(true);
     /*
      * Hidden until it is where it belongs. `tauri_plugin_window_state` puts it back at the size and
      * place it had as it is built, and `fit_main_window_to_screen` brings it onto a screen that is
@@ -4940,8 +4990,9 @@ fn app_makes_room_for_window_buttons(root: &Path) -> bool {
 /**
 The window's appearance and title bar for the page it shows.
 
-Setup: the setup screens' theme, a transparent title bar over their ground, the title shown. The
-window starts this way (in `setup`), so the first paint already matches.
+Setup: the setup screens' theme and a transparent title bar over their ground. Its native title
+stays hidden: the page already names OpenBot, and the relocated window buttons no longer share
+the stock title's baseline. The builder hides it before the first paint too.
 
 OpenBot from this machine: one surface, as Mac apps with a sidebar have it. The title bar becomes an
 overlay, its title text is hidden (the sidebar carries the name), and the page is marked so its
@@ -4973,7 +5024,10 @@ fn match_title_bar<R: tauri::Runtime>(window: &tauri::Window<R>, page: WindowPag
             _ => SETUP_BACKGROUND,
         };
         let _ = window.set_background_color((page == WindowPage::Setup).then_some(ground));
-        show_window_title(window, page != WindowPage::OwnedApp);
+        show_window_title(
+            window,
+            matches!(page, WindowPage::LocalApp | WindowPage::Other),
+        );
     }
     // OpenBot's own page tints the bar to its own light or dark through `appearance`.
     #[cfg(target_os = "windows")]
@@ -5211,6 +5265,7 @@ reads "default" again, so the page's offer to turn them on came back after every
 shows them through the system instead, and answers that they are allowed: a desktop app needs no
 permission of its own to post one (tauri-plugin-notification, `desktop.rs`).
 */
+const APP_PAGE_EVENTS: [&str; 2] = ["core:event:allow-listen", "core:event:allow-unlisten"];
 const APP_PAGE_NOTIFICATIONS: [&str; 3] = [
     "notification:allow-is-permission-granted",
     "notification:allow-request-permission",
@@ -5246,6 +5301,7 @@ fn allow_app_page<R: tauri::Runtime>(app: &tauri::AppHandle<R>, url: &tauri::Url
     for permission in desktop_page::PERMISSIONS
         .iter()
         .chain(&APP_PAGE_NOTIFICATIONS)
+        .chain(&APP_PAGE_EVENTS)
     {
         capability = capability.permission(*permission);
     }
@@ -5310,6 +5366,34 @@ mod app_page_tests {
     }
 
     const STOP: &str = "plugin:openbot-desktop|stop";
+
+    #[test]
+    fn service_usage_is_available_only_to_the_verified_openbot_origin() {
+        const USAGE: &str = "plugin:openbot-desktop|service_usage";
+        let (app, window) = app();
+        let owned: tauri::Url = "http://127.0.0.1:3010/computers/home".parse().unwrap();
+
+        allow_app_page(app.handle(), &owned);
+        assert!(ask(&window, owned.as_str(), USAGE).is_err());
+
+        trust_owned_app(app.handle(), "http://127.0.0.1:3010");
+        allow_app_page(app.handle(), &owned);
+        assert_eq!(
+            ask(&window, owned.as_str(), USAGE),
+            Ok(serde_json::Value::Null)
+        );
+
+        for foreign in [
+            "http://127.0.0.1:3011/",
+            "http://localhost:3010/",
+            "http://[::1]:3010/",
+            "https://example.com/",
+        ] {
+            let url: tauri::Url = foreign.parse().unwrap();
+            allow_app_page(app.handle(), &url);
+            assert!(ask(&window, foreign, USAGE).is_err(), "{foreign}");
+        }
+    }
 
     /// Settings → This computer can stop OpenBot and the local Intelligence. A page on another
     /// loopback port that this window loads, from a link in a reply for instance, used to get the
@@ -5711,6 +5795,28 @@ mod app_page_tests {
 
 /// Where the Status window's page is: the setup page, at `#status`.
 const STATUS_FRAGMENT: &str = "status";
+
+fn show_computers_page(app: &tauri::AppHandle) {
+    let root = cleanup_root(&app.state::<Shell>(), &stack::default_root());
+    let Some(mut url) = ports_for_shell(app)
+        .ok()
+        .and_then(|ports| owned_app_url(&app.state::<Shell>(), &root, &ports))
+        .and_then(|url| url.parse::<tauri::Url>().ok())
+    else {
+        return;
+    };
+    let Some(window) = app.get_webview_window("main") else {
+        return;
+    };
+    url.set_path("/computers");
+    trust_owned_app(app, url.as_str());
+    if window.navigate(url).is_err() {
+        return;
+    }
+    let _ = window.show();
+    let _ = window.unminimize();
+    let _ = window.set_focus();
+}
 
 /**
 The Status window: what OpenBot is running, what it costs, and Restart and Stop for each part.
@@ -6223,6 +6329,7 @@ fn serve_shown_deployment<R: tauri::Runtime>(
         Ok(broker) => *shell.host_access.lock().unwrap() = Some(broker),
         Err(problem) => log::warn!("[show] {}", problem_detail(problem)),
     }
+    start_computer_worker(app, shell, server_port, token.clone());
     let generation = shell.generation.load(std::sync::atomic::Ordering::SeqCst);
     watch_connections(
         app.clone(),
@@ -8259,6 +8366,7 @@ fn chose(app: &tauri::AppHandle, item: &str) {
         // who wants it stopped does not necessarily want the application gone.
         "stop" => stop_from_menu(app.clone(), AskedFrom::Menu),
         "status" => show_status_window(app),
+        "workspaces" => show_computers_page(app),
         "logs" => {
             let app = app.clone();
             std::thread::spawn(move || {
@@ -8554,6 +8662,13 @@ fn install_menus<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<
         )?));
         entries.push(MenuEntry::Plain(MenuItem::with_id(
             app,
+            "workspaces",
+            "Computers…",
+            true,
+            None::<&str>,
+        )?));
+        entries.push(MenuEntry::Plain(MenuItem::with_id(
+            app,
             "logs",
             TROUBLESHOOTING_MENU_LABEL,
             true,
@@ -8608,6 +8723,13 @@ fn install_menus<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<
             "Status…",
             true,
             None::<&str>,
+        )?));
+        entries.push(MenuEntry::Plain(MenuItem::with_id(
+            app,
+            "workspaces",
+            "Computers…",
+            true,
+            Some("CmdOrCtrl+Shift+E"),
         )?));
         entries.push(MenuEntry::Plain(MenuItem::with_id(
             app,

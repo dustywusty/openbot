@@ -57,7 +57,8 @@ export function dismissSelfHostBannerMutationOptions(
         fallback: "Could not save your preferences",
       });
     },
-    onMutate: () => {
+    onMutate: async () => {
+      await queryClient.cancelQueries({ queryKey });
       const previous = queryClient.getQueryData(queryKey);
       if (previous) {
         queryClient.setQueryData(queryKey, {

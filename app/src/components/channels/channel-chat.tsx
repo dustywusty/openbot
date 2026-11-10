@@ -21,6 +21,7 @@ import {
 import { ChannelWorkRows } from "@/components/channels/channel-work";
 import { attachmentModality } from "@/components/channels/chat-messages";
 import { toAgentOptions } from "@/components/channels/composer";
+import { CodingModelPicker } from "@/components/channels/composer/coding-model-picker";
 import { ModelPicker } from "@/components/channels/composer/model-picker";
 import { ConversationIntro } from "@/components/channels/conversation-intro";
 import { ConversationView } from "@/components/channels/conversation-view";
@@ -55,6 +56,7 @@ import {
   turnFinishedAway,
 } from "@/lib/channels/turns-finished-away";
 import { useConversationActivity } from "@/lib/computers/activity";
+import { useCodingConversationModel } from "@/lib/computers/coding-run-model";
 import { channelAgentId, useActiveBot } from "@/lib/copilot/active-bot";
 import {
   observeApprovalAgent,
@@ -793,6 +795,11 @@ export function ChannelChat({
     channel.id,
     botProfile?.runsOnOpenBotModel ? models.data : undefined,
   );
+  const codingModel = useCodingConversationModel(
+    channel.id,
+    !!botProfile?.workspaceBot,
+  );
+  const conversationModel = botProfile?.workspaceBot ? codingModel : runModel;
   /*
    * History is the snapshot, the stored thread AND the voice archive. The transcript shows none of
    * it until all three are in, so it lands once at the bottom instead of drawing the conversation
@@ -1428,10 +1435,10 @@ export function ChannelChat({
                     carryingOn ||
                     Boolean(question) ||
                     call.active ||
-                    runModel.saving
+                    conversationModel.saving
                   }
                   onSelect={async (text) => {
-                    await runModel.beforeSend();
+                    await conversationModel.beforeSend();
                     // The transcript already reports a failed turn through runError.
                     await sayRef.current(text).catch(() => undefined);
                   }}
@@ -1451,15 +1458,23 @@ export function ChannelChat({
             // The `/` menu exposes only skills granted to this Bot.
             commands={skillCommands}
             modelPicker={
-              <ModelPicker
-                catalogue={
-                  botProfile?.runsOnOpenBotModel ? models.data : undefined
-                }
-                disabled={!channel.active}
-                onChange={runModel.choose}
-                saving={runModel.saving}
-                value={runModel.value}
-              />
+              botProfile?.workspaceBot ? (
+                <CodingModelPicker
+                  model={codingModel}
+                  workspaceId={botProfile.workspaceBot.workspaceId}
+                  disabled={!channel.active}
+                />
+              ) : (
+                <ModelPicker
+                  catalogue={
+                    botProfile?.runsOnOpenBotModel ? models.data : undefined
+                  }
+                  disabled={!channel.active}
+                  onChange={runModel.choose}
+                  saving={runModel.saving}
+                  value={runModel.value}
+                />
+              )
             }
             // Readiness is handled by `say`; deletion is the only disabled-chat state.
             disabled={!channel.active}
@@ -1540,7 +1555,7 @@ export function ChannelChat({
               </>
             }
             onSubmit={async (draft) => {
-              await runModel.beforeSend();
+              await conversationModel.beforeSend();
               // `draft.agentId` carries the @mentioned coworker, but nothing routes on it yet: this
               // channel is pinned to one `runtimeAgentId` for the life of its thread, so honouring a
               // per-message mention is a change to that binding, not to the composer.

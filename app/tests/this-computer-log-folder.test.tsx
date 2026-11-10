@@ -1,5 +1,5 @@
 /**
- * Settings → This computer: the Logs row and Open log folder. OpenBot Desktop writes a log file on
+ * Computers → OpenBot home: the Logs row and Open log folder. OpenBot Desktop writes a log file on
  * this computer, and this is how a person finds it to share it. These tests stand in for the IPC
  * Tauri injects into the Desktop window, answering as the shell's `openbot-desktop` plugin does
  * (desktop/src-tauri/src/desktop_page.rs: `status` and `open_logs`); the page, its queries and its
@@ -15,12 +15,10 @@ import {
   test,
 } from "bun:test";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
-import { QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
-import type { ComponentType } from "react";
+import { cleanup, fireEvent, waitFor } from "@testing-library/react";
 import type { DesktopStatus } from "@/lib/desktop/queries";
 import { queryClient } from "@/query-client";
-import { Route as ThisComputerRoute } from "@/routes/_authed/settings/this-computer";
+import { renderHomeComputerPage } from "./home-computer.fixture";
 
 const LOG_FOLDER =
   "C:\\Users\\Administrator\\AppData\\Local\\ai.copilotkit.openbot.desktop\\logs";
@@ -83,12 +81,7 @@ afterAll(async () => {
 });
 
 function renderPage() {
-  const Page = ThisComputerRoute.options.component as ComponentType;
-  return render(
-    <QueryClientProvider client={queryClient}>
-      <Page />
-    </QueryClientProvider>,
-  );
+  return renderHomeComputerPage();
 }
 
 test("Open log folder opens the desktop app's log folder", async () => {

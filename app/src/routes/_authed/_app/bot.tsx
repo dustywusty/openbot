@@ -1,12 +1,11 @@
-import { TelemetryAssistantMessage } from "@/components/channels/telemetry-assistant-message";
 import { CopilotChat } from "@copilotkit/react-core/v2";
 import { IconPlus } from "@tabler/icons-react";
 import { useQuery } from "@tanstack/react-query";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { ConversationApprovals } from "@/components/approvals/inline-approval";
+import { TelemetryAssistantMessage } from "@/components/channels/telemetry-assistant-message";
 import { ComputerChatControls } from "@/components/computer/computer-controls";
 import { ComputerViewPanel } from "@/components/computer/computer-panel";
-import { useOpenComputerOnRequest } from "@/lib/computers/panel-view";
 import { DetailPanel } from "@/components/layout/detail-panel";
 import { SidebarToggleBar } from "@/components/layout/sidebar-toggle";
 import { Button } from "@/components/ui/button";
@@ -17,6 +16,8 @@ import {
   agentListQueryOptions,
 } from "@/lib/agents/queries";
 import { tryClient } from "@/lib/client";
+import { useOpenComputerOnRequest } from "@/lib/computers/panel-view";
+import { assignedVm } from "@/lib/computers/vm-target";
 import { useActiveBot } from "@/lib/copilot/active-bot";
 import { useBotActivity } from "@/lib/copilot/bot-activity";
 import { useBotThread } from "@/lib/copilot/bot-thread";
@@ -140,10 +141,25 @@ function RouteComponent() {
    * Keyed on the Bot, so the hooks below never see it change under them. They cannot be called
    * conditionally, and the guards above return before any of them run.
    */
-  return <BotChat agentId={agentId} key={agentId} name={bot.name} />;
+  return (
+    <BotChat
+      agentId={agentId}
+      key={agentId}
+      name={bot.name}
+      vmId={assignedVm(bot)}
+    />
+  );
 }
 
-function BotChat({ agentId, name }: { agentId: string; name: string }) {
+function BotChat({
+  agentId,
+  name,
+  vmId,
+}: {
+  agentId: string;
+  name: string;
+  vmId?: string;
+}) {
   // Tool calls here act on this Bot's own computer.
   useActiveBot(agentId);
   /*
@@ -171,15 +187,24 @@ function BotChat({ agentId, name }: { agentId: string; name: string }) {
       search: (previous) => ({ ...previous, watch: open ? true : undefined }),
     });
   // A command in the chat clicked opens the Computer on its terminal.
-  useOpenComputerOnRequest(agentId, () => showComputer(true));
+  useOpenComputerOnRequest(agentId, (view) => {
+    if (vmId)
+      return navigate({
+        to: "/computers/$computerId",
+        params: { computerId: vmId },
+        search: { view: view === "terminal" ? "shell" : "setup" },
+        hash: view === "terminal" ? "computer-shell" : undefined,
+      });
+    return showComputer(true);
+  });
 
   return (
     <DetailPanel
       title="Computer"
-      open={watch === true}
+      open={watch === true && !vmId}
       onClose={() => showComputer(false)}
       waiting={threadId ? <ConversationApprovals threadId={threadId} /> : null}
-      detail={<ComputerViewPanel agentId={agentId} name={name} />}
+      detail={vmId ? null : <ComputerViewPanel agentId={agentId} name={name} />}
     >
       <div className="flex h-full min-h-0 flex-col">
         <SidebarToggleBar />
@@ -199,11 +224,26 @@ function BotChat({ agentId, name }: { agentId: string; name: string }) {
              * deserves a word, not just a glyph.
              */}
             <div className="flex flex-wrap items-start gap-2">
-              <ComputerChatControls
-                computerId={agentId}
-                open={watch === true}
-                onOpenChange={showComputer}
-              />
+              {vmId ? (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  render={
+                    <Link
+                      to="/computers/$computerId"
+                      params={{ computerId: vmId }}
+                    />
+                  }
+                >
+                  Open workspace
+                </Button>
+              ) : (
+                <ComputerChatControls
+                  computerId={agentId}
+                  open={watch === true}
+                  onOpenChange={showComputer}
+                />
+              )}
               <Button onClick={startNew} size="sm" variant="ghost">
                 <IconPlus />
                 New chat
@@ -211,7 +251,9 @@ function BotChat({ agentId, name }: { agentId: string; name: string }) {
             </div>
           </div>
           <p className="text-sm text-muted-foreground">
-            Ask it to open a page and watch it work.
+            {vmId
+              ? "Work with this Bot in its assigned workspace."
+              : "Ask it to open a page and watch it work."}
           </p>
         </header>
         {/*

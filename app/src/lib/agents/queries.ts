@@ -1,4 +1,5 @@
 import { queryOptions } from "@tanstack/react-query";
+import type { WorkspaceBot } from "@openbot/shared/workspace-bot";
 import { client, tryClient } from "@/lib/client";
 
 export type AgentVisibility = "public" | "private";
@@ -10,6 +11,13 @@ export type AgentVisibility = "public" | "private";
  * returned flags rather than recomputing ownership rules.
  */
 export type AgentProfile = {
+  /** Desktop-owned VM for this Bot's file and command tools; null uses OpenBot home. */
+  computerId?: string | null;
+  /** Server authorization verdict for editing this assignment. */
+  canAssignComputer?: boolean;
+  /** Server authorization verdict for editing a native coding Bot's saved defaults. */
+  canEditCodingDefaults?: boolean;
+  workspaceBot?: WorkspaceBot | null;
   id: string;
   name: string;
   title: string;

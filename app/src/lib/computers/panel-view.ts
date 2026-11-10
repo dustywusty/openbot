@@ -107,14 +107,14 @@ export function onComputerViewRequest(
 /** Open the Computer panel when the person asks to see one of this Bot's views. For the routes that own the panel. */
 export function useOpenComputerOnRequest(
   computerId: string | undefined,
-  open: () => void,
+  open: (view: PanelView) => void,
 ): void {
   const latest = useRef(open);
   latest.current = open;
   useEffect(() => {
     if (!computerId) return;
     return onComputerViewRequest((request) => {
-      if (request.computerId === computerId) latest.current();
+      if (request.computerId === computerId) latest.current(request.view);
     });
   }, [computerId]);
 }

@@ -2,7 +2,14 @@ import { afterAll, afterEach, beforeAll, expect, mock, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
-import { cleanup, render, waitFor, within } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useEffect } from "react";
 import type { StartOutcome } from "./LocalIntelligence";
@@ -184,7 +191,20 @@ function commands() {
     );
 }
 
+/** History assertions explicitly reveal the checklist; default presentation is tested separately. */
+function openLifecycleDetails(view: ReturnType<typeof render>) {
+  const details = view.container.querySelector<HTMLDetailsElement>(
+    "details.lifecycle-details",
+  );
+  if (details && !details.open) {
+    fireEvent.click(
+      within(details).getByText("Details", { selector: "summary" }),
+    );
+  }
+}
+
 function row(screen: ReturnType<typeof view>, name: string) {
+  openLifecycleDetails(screen);
   return screen.getByRole("listitem", { name });
 }
 
@@ -230,6 +250,46 @@ test("the whole sequence runs by itself: set up, connect, wait for ready and val
   }
   // Nothing to press: the installation is the consent.
   expect(screen.queryByRole("button", { name: /Connect/ })).toBeNull();
+});
+
+test("an active Start keeps one progress summary and reveals its checklist only through Details", async () => {
+  const settingUp = deferred<LocalReport>();
+  invokeHandler = async (command) => {
+    if (command === "set_up_local_eval") return settingUp.promise;
+    if (command === "cancel_local_eval") return null;
+    throw new Error(`unexpected ${command}`);
+  };
+  const screen = view();
+  await screen.findByRole("region", { name: "How far along" });
+  const details = screen.container.querySelector<HTMLDetailsElement>(
+    "details.lifecycle-details",
+  );
+  expect(details).not.toBeNull();
+  expect(details?.open).toBe(false);
+  const activeSummary = journeyOf(screen).querySelector(".journey-said");
+  expect(activeSummary?.getAttribute("aria-live")).toBe("polite");
+  expect(activeSummary?.getAttribute("aria-atomic")).toBe("true");
+  expect(screen.getAllByRole("progressbar")).toHaveLength(1);
+  await waitFor(() =>
+    expect(screen.container.querySelectorAll("ol, ul").length).toBeGreaterThan(
+      0,
+    ),
+  );
+  const lists = screen.container.querySelectorAll("ol, ul");
+  for (const list of lists) expect(details?.contains(list)).toBe(true);
+  await act(async () => {
+    await userEvent.click(
+      within(details!).getByText("Details", { selector: "summary" }),
+    );
+  });
+  expect(details?.open).toBe(true);
+  expect(screen.getByRole("listitem", { name: SETUP })).toBeTruthy();
+  expect(screen.getAllByRole("progressbar")).toHaveLength(1);
+  await act(async () => {
+    await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+  });
+  expect(await screen.findByRole("button", { name: "Retry" })).toBeTruthy();
+  expect(commands()).toContain("cancel_local_eval");
 });
 
 /**
@@ -1380,6 +1440,8 @@ test("a start that fails says OpenBot did not start, not that Intelligence stopp
     onStart: async () => "failed",
   });
   const card = await screen.findByRole("alert", { name: "OpenBot" });
+  const details = card.closest("details");
+  expect(details === null || details.open).toBe(true);
   expect(card.textContent).toContain("OpenBot did not start");
   expect(card.textContent).toContain("Everything else is ready");
   expect(card.textContent).not.toContain("Setup stopped");

@@ -182,6 +182,17 @@ main {
   padding: clamp(16px, 3vh, 32px) 24px 24px;
 }
 
+/*
+ * Start and Quit have one status card, centred in the available window. Setup forms keep their
+ * top anchor so fields stay under the pointer as background progress changes. Leave room for
+ * the native window controls; a taller lifecycle card retains the scrolling rule below.
+ */
+main.lifecycle {
+  justify-content: center;
+  padding-top: max(3rem, env(safe-area-inset-top, 0px));
+  padding-bottom: max(1.5rem, env(safe-area-inset-bottom, 0px));
+}
+
 /* The one focal surface per screen: a white card on the frame, as OpenBot draws its panels. */
 .sheet {
   width: 100%;
@@ -1141,7 +1152,7 @@ a:hover {
 
 /*
  * One Start, start to finish (`StartJourney`): what is happening now, the time left and so far, and
- * one bar over every row that only moves forward. Drawn as the rows are, above them.
+ * one bar that only moves forward. Step history expands within this same surface.
  */
 .journey {
   margin: 4px 0 12px;
@@ -1199,6 +1210,25 @@ a:hover {
 .journey progress::-moz-progress-bar {
   background: var(--ring);
   border-radius: inherit;
+}
+
+/* Start and Quit share one progress surface; history stays out of the active status. */
+.lifecycle-details {
+  margin-top: 2px;
+  padding-top: 10px;
+}
+
+.lifecycle-details > .steps {
+  margin-top: 10px;
+  max-height: min(18rem, 35vh);
+  overflow-y: auto;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.lifecycle-details > .steps > .step {
+  padding-inline: 0;
 }
 
 /*

@@ -32,7 +32,29 @@ pub const PLUGIN: &str = "openbot-desktop";
 pub const QUIT_SHORTCUT_PAGE: &str = include_str!("quit-shortcut.js");
 
 /// The permissions a page needs for every command here.
-pub const PERMISSIONS: [&str; 21] = [
+pub const PERMISSIONS: [&str; 43] = [
+    "openbot-desktop:allow-service-usage",
+    "openbot-desktop:allow-computer-auth-allow",
+    "openbot-desktop:allow-computer-auth-start",
+    "openbot-desktop:allow-computer-auth-status",
+    "openbot-desktop:allow-computer-auth-cancel",
+    "openbot-desktop:allow-computer-auth-logout",
+    "openbot-desktop:allow-computer-register",
+    "openbot-desktop:allow-computer-disconnect",
+    "openbot-desktop:allow-workspace-models",
+    "openbot-desktop:allow-workspace-ports",
+    "openbot-desktop:allow-workspace-terminal-open",
+    "openbot-desktop:allow-workspace-terminal-write",
+    "openbot-desktop:allow-workspace-terminal-resize",
+    "openbot-desktop:allow-workspace-terminal-close",
+    "openbot-desktop:allow-workspace-list",
+    "openbot-desktop:allow-workspace-recipe",
+    "openbot-desktop:allow-workspace-create",
+    "openbot-desktop:allow-workspace-prepare",
+    "openbot-desktop:allow-workspace-stop",
+    "openbot-desktop:allow-workspace-delete",
+    "openbot-desktop:allow-workspace-logs",
+    "openbot-desktop:allow-workspace-exec",
     "openbot-desktop:allow-appearance",
     "openbot-desktop:allow-status",
     "openbot-desktop:allow-restart",
@@ -210,6 +232,26 @@ async fn ai_connection(app: tauri::AppHandle) -> openbot_desktop_lib::ai_connect
     crate::ai_connection_now(&app)
 }
 
+/// Metadata-only OpenBot connections, authorized for the current signed-in account.
+#[tauri::command]
+async fn service_usage(
+    app: tauri::AppHandle,
+    ticket: String,
+    refresh: Option<bool>,
+) -> Result<openbot_desktop_lib::provider_usage::ServiceUsageSnapshot, String> {
+    let _ = refresh; // No cache or provider probes: every response needs a fresh actor proof.
+    let worker = app
+        .state::<crate::Shell>()
+        .computer_worker
+        .lock()
+        .map_err(|_| "The Computer connection is unavailable.")?
+        .clone()
+        .ok_or("Start OpenBot before checking model connections.")?;
+    tauri::async_runtime::spawn_blocking(move || worker.service_usage(&ticket))
+        .await
+        .map_err(|_| "Couldn't read model connections. Try again.".to_owned())?
+}
+
 /// The AI model row's Change: Stop, then the setup window at its AI screen, the one its Change AI
 /// connection opens. The page asking goes with OpenBot, as with Stop.
 #[tauri::command]
@@ -249,9 +291,305 @@ async fn zoom(app: tauri::AppHandle, step: crate::zoom::Step) {
     crate::zoom_windows(&app, step);
 }
 
+async fn workspace_job<T: Send + 'static>(
+    job: impl FnOnce(openbot_workspaces::Manager) -> Result<T, String> + Send + 'static,
+) -> Result<T, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        job(openbot_workspaces::Manager::new(
+            openbot_workspaces::default_root()?,
+        )?)
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+async fn workspace_list() -> Result<Vec<openbot_workspaces::Workspace>, String> {
+    workspace_job(|manager| manager.list()).await
+}
+
+#[tauri::command]
+async fn computer_register(
+    app: tauri::AppHandle,
+    id: String,
+    ticket: String,
+) -> Result<crate::computer_worker::RegisteredComputer, String> {
+    let worker = app
+        .state::<crate::Shell>()
+        .computer_worker
+        .lock()
+        .map_err(|_| "The Computer connection is unavailable.")?
+        .clone()
+        .ok_or("Start OpenBot before pairing a Computer.")?;
+    tauri::async_runtime::spawn_blocking(move || worker.register(&id, &ticket))
+        .await
+        .map_err(|_| "Computer pairing did not finish.".to_owned())?
+}
+
+#[tauri::command]
+async fn computer_auth_start(
+    app: tauri::AppHandle,
+    id: String,
+    ticket: String,
+) -> Result<openbot_desktop_lib::computer_auth::Authorization, String> {
+    let worker = app
+        .state::<crate::Shell>()
+        .computer_worker
+        .lock()
+        .map_err(|_| "The Computer connection is unavailable.")?
+        .clone()
+        .ok_or("Start OpenBot before connecting ChatGPT.")?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let authorization = worker.auth_start(&id, &ticket)?;
+        use tauri_plugin_opener::OpenerExt;
+        if app
+            .opener()
+            .open_url(&authorization.authorization_url, None::<&str>)
+            .is_err()
+        {
+            let _ = worker.abort_opening_auth(&id, &authorization.attempt_id);
+            return Err("The sign-in page could not open. Try connecting ChatGPT again.".into());
+        }
+        Ok(authorization)
+    })
+    .await
+    .map_err(|_| "ChatGPT sign-in could not start.".to_owned())?
+}
+
+#[tauri::command]
+async fn computer_auth_status(
+    app: tauri::AppHandle,
+    id: String,
+    ticket: String,
+) -> Result<crate::computer_worker::ComputerAuthStatus, String> {
+    let worker = app
+        .state::<crate::Shell>()
+        .computer_worker
+        .lock()
+        .map_err(|_| "The Computer connection is unavailable.")?
+        .clone()
+        .ok_or("Start OpenBot before checking Computer sign-in.")?;
+    tauri::async_runtime::spawn_blocking(move || worker.auth_status(&id, &ticket))
+        .await
+        .map_err(|_| "Could not check ChatGPT sign-in.".to_owned())?
+}
+
+#[tauri::command]
+async fn computer_auth_allow(
+    app: tauri::AppHandle,
+    id: String,
+    ticket: String,
+) -> Result<(), String> {
+    let worker = app
+        .state::<crate::Shell>()
+        .computer_worker
+        .lock()
+        .map_err(|_| "The Computer connection is unavailable.")?
+        .clone()
+        .ok_or("Start OpenBot before granting Computer access.")?;
+    tauri::async_runtime::spawn_blocking(move || worker.auth_allow(&id, &ticket))
+        .await
+        .map_err(|_| "Could not grant ChatGPT access to this Computer.".to_owned())?
+}
+
+#[tauri::command]
+async fn computer_auth_cancel(
+    app: tauri::AppHandle,
+    id: String,
+    ticket: String,
+    attempt_id: String,
+) -> Result<(), String> {
+    let worker = app
+        .state::<crate::Shell>()
+        .computer_worker
+        .lock()
+        .map_err(|_| "The Computer connection is unavailable.")?
+        .clone()
+        .ok_or("Start OpenBot before cancelling Computer sign-in.")?;
+    tauri::async_runtime::spawn_blocking(move || worker.cancel_auth(&id, &ticket, &attempt_id))
+        .await
+        .map_err(|_| "Could not cancel ChatGPT sign-in.".to_owned())?
+}
+
+#[tauri::command]
+async fn computer_auth_logout(
+    app: tauri::AppHandle,
+    id: String,
+    ticket: String,
+) -> Result<openbot_desktop_lib::computer_auth::LogoutStatus, String> {
+    let worker = app
+        .state::<crate::Shell>()
+        .computer_worker
+        .lock()
+        .map_err(|_| "The Computer connection is unavailable.")?
+        .clone()
+        .ok_or("Start OpenBot before disconnecting ChatGPT.")?;
+    tauri::async_runtime::spawn_blocking(move || worker.auth_logout(&id, &ticket))
+        .await
+        .map_err(|_| "Could not disconnect ChatGPT.".to_owned())?
+}
+
+#[tauri::command]
+async fn computer_disconnect(
+    app: tauri::AppHandle,
+    id: String,
+    ticket: String,
+) -> Result<(), String> {
+    let worker = app
+        .state::<crate::Shell>()
+        .computer_worker
+        .lock()
+        .map_err(|_| "The Computer connection is unavailable.")?
+        .clone()
+        .ok_or("Start OpenBot before disconnecting a workspace.")?;
+    tauri::async_runtime::spawn_blocking(move || worker.disconnect(&id, &ticket))
+        .await
+        .map_err(|_| "The workspace could not disconnect.".to_owned())?
+}
+
+#[tauri::command]
+async fn workspace_recipe(
+    base_image: Option<openbot_workspaces::BaseImage>,
+) -> openbot_workspaces::Recipe {
+    openbot_workspaces::Recipe::for_image(
+        base_image.unwrap_or(openbot_workspaces::BaseImage::Debian13),
+    )
+}
+
+#[tauri::command]
+async fn workspace_create(
+    recipe: openbot_workspaces::Recipe,
+) -> Result<openbot_workspaces::Workspace, String> {
+    workspace_job(move |manager| manager.create(recipe)).await
+}
+
+#[tauri::command]
+async fn workspace_prepare(
+    id: String,
+    on_event: tauri::ipc::Channel<openbot_workspaces::Event>,
+) -> Result<openbot_workspaces::Workspace, String> {
+    workspace_job(move |manager| {
+        manager.prepare(&id, |event| {
+            let _ = on_event.send(event);
+        })
+    })
+    .await
+}
+
+#[tauri::command]
+async fn workspace_stop(id: String) -> Result<openbot_workspaces::Workspace, String> {
+    workspace_job(move |manager| manager.stop(&id, |_| {})).await
+}
+
+#[tauri::command]
+async fn workspace_delete(app: tauri::AppHandle, id: String) -> Result<(), String> {
+    let worker = app
+        .state::<crate::Shell>()
+        .computer_worker
+        .lock()
+        .map_err(|_| "The Computer connection is unavailable.")?
+        .clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let manager = openbot_workspaces::Manager::new(openbot_workspaces::default_root()?)?;
+        manager.get(&id)?;
+        if crate::workspace_terminal::active_for(&id)? {
+            return Err("Close this VM's terminals before deleting it.".into());
+        }
+        let result = (|| {
+            if let Some(worker) = &worker {
+                worker.revoke_computer(&id)?;
+            }
+            manager.delete(&id)
+        })();
+        if let Some(worker) = &worker {
+            worker.finish_deletion(&id);
+        }
+        result
+    })
+    .await
+    .map_err(|_| "VM deletion did not finish. Its saved record was kept.".to_owned())?
+}
+
+#[tauri::command]
+async fn workspace_logs(id: String) -> Result<String, String> {
+    workspace_job(move |manager| manager.logs(&id)).await
+}
+
+#[tauri::command]
+async fn workspace_models(id: String) -> Result<Vec<openbot_workspaces::CodexModel>, String> {
+    workspace_job(move |manager| manager.codex_models(&id)).await
+}
+
+#[tauri::command]
+async fn workspace_ports(id: String) -> Result<Vec<openbot_workspaces::ListeningPort>, String> {
+    workspace_job(move |manager| manager.ports(&id)).await
+}
+
+#[tauri::command]
+async fn workspace_exec(
+    id: String,
+    command: String,
+    on_event: tauri::ipc::Channel<openbot_workspaces::Event>,
+) -> Result<(), String> {
+    if command.len() > 8192 || command.contains('\0') {
+        return Err("Choose a guest command up to 8192 characters.".into());
+    }
+    workspace_job(move |manager| {
+        manager.execute(&id, &["bash".into(), "-lc".into(), command], &mut |event| {
+            let _ = on_event.send(event);
+        })
+    })
+    .await
+}
+
+#[tauri::command]
+async fn workspace_terminal_open(
+    id: String,
+    on_event: tauri::ipc::Channel<crate::workspace_terminal::Event>,
+) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || crate::workspace_terminal::open(&id, on_event))
+        .await
+        .map_err(|e| e.to_string())?
+}
+#[tauri::command]
+async fn workspace_terminal_write(session: String, input: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || crate::workspace_terminal::write(&session, &input))
+        .await
+        .map_err(|e| e.to_string())?
+}
+#[tauri::command]
+async fn workspace_terminal_resize(session: String, rows: u16, cols: u16) -> Result<(), String> {
+    crate::workspace_terminal::resize(&session, rows, cols)
+}
+#[tauri::command]
+async fn workspace_terminal_close(session: String) -> Result<(), String> {
+    crate::workspace_terminal::close(&session)
+}
+
 pub fn plugin() -> tauri::plugin::TauriPlugin<tauri::Wry> {
     tauri::plugin::Builder::new(PLUGIN)
         .invoke_handler(tauri::generate_handler![
+            computer_register,
+            computer_disconnect,
+            computer_auth_start,
+            computer_auth_status,
+            computer_auth_cancel,
+            computer_auth_logout,
+            computer_auth_allow,
+            workspace_list,
+            workspace_recipe,
+            workspace_create,
+            workspace_prepare,
+            workspace_stop,
+            workspace_delete,
+            workspace_logs,
+            workspace_ports,
+            workspace_models,
+            workspace_exec,
+            workspace_terminal_open,
+            workspace_terminal_write,
+            workspace_terminal_resize,
+            workspace_terminal_close,
             appearance,
             status,
             restart,
@@ -268,6 +606,7 @@ pub fn plugin() -> tauri::plugin::TauriPlugin<tauri::Wry> {
             open_logs,
             notify,
             ai_connection,
+            service_usage,
             change_ai_connection,
             usage_data,
             set_usage_data,

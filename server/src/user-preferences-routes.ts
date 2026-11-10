@@ -1,4 +1,4 @@
-import { SKIN_IDS } from "@openbot/shared/user-preferences";
+import { CHAT_WIDTHS, SKIN_IDS } from "@openbot/shared/user-preferences";
 import { Hono, type MiddlewareHandler } from "hono";
 import { z } from "zod";
 import type { AppVariables } from "./auth/guards";
@@ -15,6 +15,7 @@ const preferencesPatch = z
     selfHostBannerDismissed: z.boolean().optional(),
     narration: z.enum(["on", "off"]).optional(),
     skin: z.enum(SKIN_IDS).optional(),
+    chatWidth: z.enum(CHAT_WIDTHS).optional(),
     proactive: z.enum(["on", "off"]).optional(),
   })
   .refine((patch) => Object.keys(patch).length > 0);
@@ -47,7 +48,7 @@ export function userPreferencesRoutes(
     if (!parsed.success) {
       return context.json(
         {
-          error: `Choose agent or thread for message list emphasis, true or false for the self-host banner, on or off for narration or check-ins, or one of these skins: ${SKIN_IDS.join(", ")}.`,
+          error: `Choose agent or thread for message list emphasis, true or false for the self-host banner, on or off for narration or check-ins, comfortable, wide, or full for chat width, or one of these skins: ${SKIN_IDS.join(", ")}.`,
         },
         400,
       );

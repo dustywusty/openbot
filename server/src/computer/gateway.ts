@@ -27,6 +27,8 @@ import type {
   RequestHelpSource,
 } from "@openbot/shared/computer-control";
 import { isPersonBrowserId } from "@openbot/shared/openbot-browser";
+import type { DesktopComputerAction } from "@openbot/shared/desktop-computer";
+import { z } from "zod";
 import { HeadlessToolSuspension } from "@openbot/toolkit/headless-tools";
 import {
   ApprovalAlreadyAnsweredError,
@@ -147,6 +149,8 @@ export type ActionActor = {
 };
 
 export type ComputerGatewayOptions = {
+  /** Native guest execution still passes through this gateway's policy, approvals and audit. */
+  nativeExecution?: NativeComputerExecution;
   approvalGate?: ApprovalGate;
   provider: ComputerProvider;
   auditStore: AuditStore;
@@ -193,6 +197,31 @@ export type ComputerGatewayOptions = {
    * is a computer of its own named by a hash, so without this the admin screen cannot say whose it is.
    */
   browserOwners?: (computerIds: string[]) => Promise<Map<string, string>>;
+};
+
+export type NativeComputerExecution = {
+  /** Null means unassigned. An invalid, revoked or inaccessible assignment must throw. */
+  resolve: (
+    seat: ComputerSeat,
+    actor?: ActionActor,
+  ) => Promise<{ computerId: string } | null>;
+  execute: (input: {
+    computerId: string;
+    botId: string;
+    actor: ActionActor;
+    action: Extract<
+      DesktopComputerAction,
+      { kind: "list_files" | "read_file" | "write_file" | "run_command" }
+    >;
+    signal?: AbortSignal;
+    timeoutMs?: number;
+  }) => Promise<{
+    result?: unknown;
+    exitCode?: number;
+    stdout: string;
+    stderr: string;
+    elapsedMs: number;
+  }>;
 };
 
 /** One computer, or one seat on the shared computer, as the admin screen lists it. */
@@ -378,6 +407,29 @@ export function createComputerGateway(
   options: ComputerGatewayOptions,
 ): ComputerGateway {
   const { provider, auditStore } = options;
+  async function nativeTarget(seat: ComputerSeat, actor?: ActionActor) {
+    if (!options.nativeExecution) return null;
+    if (actor && seat.key.kind === "person" && seat.key.personId !== actor.id)
+      throw new ComputerUnavailableError(
+        "That Computer is not available to this person.",
+      );
+    return options.nativeExecution.resolve(seat, actor);
+  }
+  async function requireBrowser(seat: ComputerSeat) {
+    if (await nativeTarget(seat))
+      throw new ComputerUnavailableError(
+        "This Computer supports project files and commands. Browser control is not available on it yet.",
+      );
+  }
+  async function nativeExecute(
+    input: Parameters<NativeComputerExecution["execute"]>[0],
+  ) {
+    if (!options.nativeExecution)
+      throw new ComputerUnavailableError(
+        "The desktop Computer connection is unavailable.",
+      );
+    return options.nativeExecution.execute(input);
+  }
   /*
    * No token of its own: every call names its computer's (`at`), because a computer made for one
    * person holds a token of its own and must never be sent the deployment's.
@@ -455,6 +507,7 @@ export function createComputerGateway(
    * Bot may browse and the wrong one here, where loopback is the normal case.
    */
   async function locate(seat: ComputerSeat): Promise<string> {
+    await requireBrowser(seat);
     const address = await provider.locate(seat);
     const verdict = checkComputerAddress(address);
     if (!verdict.allowed) {
@@ -1031,7 +1084,8 @@ export function createComputerGateway(
     snapshot,
     read,
 
-    status(seat: ComputerSeat): Promise<ComputerStatus> {
+    async status(seat: ComputerSeat): Promise<ComputerStatus> {
+      await requireBrowser(seat);
       return provider.status(seat);
     },
 
@@ -1199,6 +1253,7 @@ export function createComputerGateway(
      * tried.
      */
     async stopComputer(seat: ComputerSeat, actor: ActionActor) {
+      await requireBrowser(seat);
       const result = await stopSeat(seat);
       await writeControlEvent(auditStore, "computer.stopped", {
         seat,
@@ -1218,6 +1273,7 @@ export function createComputerGateway(
      * person's computer it moves every Bot there, because they share the one image.
      */
     async updateComputer(seat: ComputerSeat, actor: ActionActor) {
+      await requireBrowser(seat);
       return update(seat.key, actor, seat);
     },
 
@@ -1229,6 +1285,7 @@ export function createComputerGateway(
      * and nothing else: the person's other Bots keep their logins.
      */
     async resetComputer(seat: ComputerSeat, actor: ActionActor) {
+      await requireBrowser(seat);
       const result = await resetSeat(seat);
       /*
        * The row goes in HERE, before the two deletes below, because this line is the point of no
@@ -1570,7 +1627,25 @@ export function createComputerGateway(
         seat,
         actor,
         { filePath: input.path },
-        () => post<ReadFileResult>(seat, "/files/read", input),
+        async () => {
+          const target = await nativeTarget(seat, actor);
+          if (!target) return post<ReadFileResult>(seat, "/files/read", input);
+          const response = await nativeExecute({
+            ...target,
+            botId: seat.botId,
+            actor,
+            action: { kind: "read_file", path: input.path },
+          });
+          const result = z
+            .object({ content: z.string().max(262144) })
+            .parse(response.result);
+          return {
+            path: input.path,
+            text: result.content,
+            truncated: false,
+            bytes: Buffer.byteLength(result.content),
+          };
+        },
       ).then((result) =>
         // A workspace file is whatever the Bot downloaded or was sent, so it is outside content.
         withUntrustedNotice(result, "workspace file", ["text"]),
@@ -1622,7 +1697,51 @@ export function createComputerGateway(
         seat,
         actor,
         { filePath: input.path ?? "." },
-        () => post<ListFilesResult>(seat, "/files/list", input),
+        async () => {
+          const target = await nativeTarget(seat, actor);
+          if (!target) return post<ListFilesResult>(seat, "/files/list", input);
+          const path = input.path ?? ".";
+          const response = await nativeExecute({
+            ...target,
+            botId: seat.botId,
+            actor,
+            action: { kind: "list_files", path },
+          });
+          const result = z
+            .object({
+              entries: z
+                .array(
+                  z.object({
+                    name: z
+                      .string()
+                      .min(1)
+                      .refine(
+                        (name) =>
+                          !name.includes("/") &&
+                          !name.includes("\0") &&
+                          name !== ".." &&
+                          name !== ".",
+                      ),
+                    directory: z.boolean(),
+                    bytes: z.number().int().nonnegative(),
+                  }),
+                )
+                .max(2048),
+            })
+            .parse(response.result);
+          return {
+            path,
+            entries: result.entries.map((entry) => ({
+              path:
+                path === "."
+                  ? entry.name
+                  : `${path.replace(/\/$/, "")}/${entry.name}`,
+              kind: entry.directory ? ("folder" as const) : ("file" as const),
+              bytes: entry.bytes,
+            })),
+            truncated: result.entries.length === 2048,
+          };
+        },
       );
     },
 
@@ -1644,14 +1763,41 @@ export function createComputerGateway(
         seat,
         actor,
         { command: input.command, ...(caller ? { signal: caller } : {}) },
-        () =>
-          post<RunCommandResult>(
+        async () => {
+          const target = await nativeTarget(seat, actor);
+          if (target) {
+            if (caller?.aborted)
+              throw new ComputerStoppedError(
+                "The Computer action was stopped.",
+              );
+            const result = await nativeExecute({
+              ...target,
+              botId: seat.botId,
+              actor,
+              action: { kind: "run_command", command: input.command },
+              ...(caller ? { signal: caller } : {}),
+              ...(input.timeoutMs === undefined
+                ? {}
+                : { timeoutMs: input.timeoutMs }),
+            });
+            return {
+              command: input.command,
+              exitCode: result.exitCode ?? 1,
+              stdout: result.stdout,
+              stderr: result.stderr,
+              elapsedMs: result.elapsedMs,
+              truncated: false,
+              timedOut: false,
+            };
+          }
+          return post<RunCommandResult>(
             seat,
             "/exec",
             input,
             caller,
             COMMAND_BACKSTOP_MS,
-          ),
+          );
+        },
       ).then((result) =>
         // What a command prints can be anything it fetched, so the output is marked.
         withUntrustedNotice(result, "command output", ["stdout", "stderr"]),
@@ -1664,7 +1810,30 @@ export function createComputerGateway(
         seat,
         actor,
         { filePath: input.path },
-        () => post<WriteFileResult>(seat, "/files/write", input),
+        async () => {
+          const target = await nativeTarget(seat, actor);
+          if (!target)
+            return post<WriteFileResult>(seat, "/files/write", input);
+          const response = await nativeExecute({
+            ...target,
+            botId: seat.botId,
+            actor,
+            action: {
+              kind: "write_file",
+              path: input.path,
+              content: input.contents,
+              append: input.append ?? false,
+            },
+          });
+          const result = z
+            .object({ written: z.number().int().nonnegative() })
+            .parse(response.result);
+          return {
+            path: input.path,
+            bytes: result.written,
+            appended: input.append ?? false,
+          };
+        },
       );
     },
   };

@@ -39,6 +39,7 @@ test("database defaults and writes survive a new store and remain scoped to the 
     selfHostBannerDismissed: false,
     narration: null,
     skin: "openbot",
+    chatWidth: "comfortable",
     proactive: "on",
   });
   expect(await store.patch(alice, { messageListEmphasis: "agent" })).toEqual({
@@ -46,6 +47,7 @@ test("database defaults and writes survive a new store and remain scoped to the 
     selfHostBannerDismissed: false,
     narration: null,
     skin: "openbot",
+    chatWidth: "comfortable",
     proactive: "on",
   });
   expect(await createUserPreferencesStore(database).read(alice)).toEqual({
@@ -53,6 +55,7 @@ test("database defaults and writes survive a new store and remain scoped to the 
     selfHostBannerDismissed: false,
     narration: null,
     skin: "openbot",
+    chatWidth: "comfortable",
     proactive: "on",
   });
   expect(await store.read(bob)).toEqual({
@@ -60,6 +63,7 @@ test("database defaults and writes survive a new store and remain scoped to the 
     selfHostBannerDismissed: false,
     narration: null,
     skin: "openbot",
+    chatWidth: "comfortable",
     proactive: "on",
   });
 });
@@ -98,6 +102,7 @@ test("the narration choice is kept in the database beside the others", async () 
     selfHostBannerDismissed: false,
     narration: "on",
     skin: "openbot",
+    chatWidth: "comfortable",
     proactive: "on",
   });
 });
@@ -109,6 +114,7 @@ test("the skin is saved on the account and survives a new store", async () => {
     selfHostBannerDismissed: false,
     narration: null,
     skin: "openmuse",
+    chatWidth: "comfortable",
     proactive: "on",
   });
   expect((await createUserPreferencesStore(database).read(id)).skin).toBe(
@@ -139,6 +145,7 @@ test("check-ins are on for a person who never chose, and their off is kept in th
     selfHostBannerDismissed: false,
     narration: null,
     skin: "openduet",
+    chatWidth: "comfortable",
     proactive: "off",
   });
   // The jsonb key the check-in claim filters on, as Postgres holds it.
@@ -230,3 +237,28 @@ test.each([
     }
   },
 );
+
+test("chat width survives a new store and invalid stored widths use the default", async () => {
+  const alice = await person();
+  const bob = await person();
+  await store.patch(alice, { chatWidth: "wide", skin: "opendots" });
+  expect(
+    (await createUserPreferencesStore(database).read(alice)).chatWidth,
+  ).toBe("wide");
+  expect((await store.read(bob)).chatWidth).toBe("comfortable");
+  await database
+    .update(users)
+    .set({
+      preferences: sql`'{"chatWidth":"retired","skin":"opendots"}'::jsonb`,
+    })
+    .where(eq(users.id, alice));
+  expect(await store.read(alice)).toMatchObject({
+    chatWidth: "comfortable",
+    skin: "opendots",
+  });
+  await store.patch(alice, { chatWidth: "full" });
+  expect(await createUserPreferencesStore(database).read(alice)).toMatchObject({
+    chatWidth: "full",
+    skin: "opendots",
+  });
+});

@@ -525,6 +525,7 @@ export const intelligenceChannelMappings = pgTable(
       provider: string;
       model?: string | null;
       effort?: string | null;
+      speed?: "standard" | "fast" | null;
     }>(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),

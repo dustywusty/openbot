@@ -6,7 +6,14 @@ import {
 } from "@tabler/icons-react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { Fragment, useState } from "react";
+import {
+  createContext,
+  Fragment,
+  useCallback,
+  useContext,
+  useEffect,
+  useState,
+} from "react";
 import { AbstractAvatar } from "@/components/agents/abstract-avatar";
 import {
   attentionSummary,
@@ -20,6 +27,8 @@ import {
 import { NeedsYouBoard } from "@/components/needs-you/board";
 import { DoneTasks, useNeedsYou } from "@/components/needs-you/needs-you";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { BotBatchActions } from "./bot-batch-actions";
 import {
   Item,
   ItemActions,
@@ -48,7 +57,33 @@ import { deploymentCapabilitiesQueryOptions } from "@/lib/deployment/queries";
  *
  * This replaces three screens (Bots, Agents and Team Bots) that listed the same Bots three ways.
  */
-export function BotRoster() {
+type Selection = {
+  editing: boolean;
+  selected: Set<string>;
+  toggle: (id: string) => void;
+  busy: boolean;
+};
+const SelectionContext = createContext<Selection | null>(null);
+
+export function BotRoster({
+  editing = false,
+  onBusyChange,
+}: {
+  editing?: boolean;
+  onBusyChange?: (busy: boolean) => void;
+} = {}) {
+  const [selected, setSelected] = useState(new Set<string>());
+  const [busy, setBusy] = useState(false);
+  const updateBusy = useCallback(
+    (value: boolean) => {
+      setBusy(value);
+      onBusyChange?.(value);
+    },
+    [onBusyChange],
+  );
+  useEffect(() => {
+    if (!editing) setSelected(new Set());
+  }, [editing]);
   const personal =
     useQuery(deploymentCapabilitiesQueryOptions()).data?.edition === "personal";
   const agents = useQuery(agentListQueryOptions());
@@ -70,8 +105,38 @@ export function BotRoster() {
   const { pinned, yours, shared } = groupRoster(agents.data);
   const yoursPinned = pinned.some((agent) => agent.mine);
 
+  const all = [
+    ...new Map(
+      [...agents.data, ...(hidden.data ?? [])].map((agent) => [
+        agent.id,
+        agent,
+      ]),
+    ).values(),
+  ];
+  const available = new Set(all.map((agent) => agent.id));
+  const activeSelection = new Set(
+    [...selected].filter((id) => available.has(id)),
+  );
+  const toggle = (id: string) =>
+    setSelected((previous) => {
+      const next = new Set(previous);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   return (
-    <>
+    <SelectionContext.Provider
+      value={{ editing, selected: activeSelection, toggle, busy }}
+    >
+      {editing && (
+        <BotBatchActions
+          agents={all}
+          selected={activeSelection}
+          setSelected={setSelected}
+          onBusy={updateBusy}
+          personal={personal}
+        />
+      )}
       {/*
        * What waits on the person, each thing under the Bot it came from and decided where it is.
        * A Bot waiting on them stays in its own section below too, with its badge.
@@ -127,7 +192,7 @@ export function BotRoster() {
       {hidden.data?.length ? (
         <HiddenSection agents={hidden.data} byId={byId} personal={personal} />
       ) : null}
-    </>
+    </SelectionContext.Provider>
   );
 }
 
@@ -146,17 +211,22 @@ function HiddenSection({
   personal: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const selection = useContext(SelectionContext);
   return (
     <PageSection
       action={
-        <Button onClick={() => setOpen(!open)} size="sm" variant="ghost">
-          {open ? "Hide" : "Show"}
-        </Button>
+        selection?.editing ? undefined : (
+          <Button onClick={() => setOpen(!open)} size="sm" variant="ghost">
+            {open ? "Hide" : "Show"}
+          </Button>
+        )
       }
       description={`${agents.length} ${agents.length === 1 ? "Bot" : "Bots"} you hid.${personal ? "" : " Only your list changes."}`}
       title="Hidden"
     >
-      {open ? <RosterRows agents={agents} byId={byId} /> : null}
+      {open || selection?.editing ? (
+        <RosterRows agents={agents} byId={byId} />
+      ) : null}
     </PageSection>
   );
 }
@@ -192,6 +262,7 @@ function RosterRow({
   agent: AgentProfile;
   state: BotAttention | undefined;
 }) {
+  const selection = useContext(SelectionContext);
   const summary = state
     ? [state.paused ? "Paused" : "", attentionSummary(state)]
         .filter(Boolean)
@@ -200,14 +271,30 @@ function RosterRow({
   const waiting = state ? waitingOnYou(state) : 0;
   return (
     <Item
-      render={<Link params={{ agentId: agent.id }} to="/bots/$agentId" />}
+      render={
+        selection?.editing ? undefined : (
+          <Link params={{ agentId: agent.id }} to="/bots/$agentId" />
+        )
+      }
       size="sm"
     >
       <ItemMedia>
         <AbstractAvatar name={agent.name} seed={agent.avatarSeed} size={28} />
       </ItemMedia>
       <ItemContent>
-        <ItemTitle>{agent.name}</ItemTitle>
+        <ItemTitle>
+          {selection?.editing ? (
+            <label
+              className="cursor-pointer"
+              htmlFor={`select-bot-${agent.id}`}
+            >
+              <span className="sr-only">Select </span>
+              {agent.name}
+            </label>
+          ) : (
+            agent.name
+          )}
+        </ItemTitle>
         <ItemDescription>{summary || agent.title}</ItemDescription>
       </ItemContent>
       <ItemActions>
@@ -216,7 +303,20 @@ function RosterRow({
             {waiting}
           </span>
         ) : null}
-        <IconChevronRight className="size-4 text-muted-foreground" />
+        {selection?.editing ? (
+          <Checkbox
+            id={`select-bot-${agent.id}`}
+            aria-label={`Select ${agent.name}`}
+            checked={selection.selected.has(agent.id)}
+            disabled={
+              selection.busy ||
+              (agent.assignedToMe === true && !agent.canManage)
+            }
+            onCheckedChange={() => selection.toggle(agent.id)}
+          />
+        ) : (
+          <IconChevronRight className="size-4 text-muted-foreground" />
+        )}
       </ItemActions>
     </Item>
   );

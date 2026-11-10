@@ -170,7 +170,10 @@ export function GroupChat({ channelId }: { channelId: string }) {
         </div>
       </div>
       {/* The same column and the same compact composer as a conversation with one Bot. */}
-      <div className="mx-auto w-full max-w-2xl shrink-0 pb-4">
+      <div
+        data-slot="composer-column"
+        className="mx-auto w-full max-w-2xl shrink-0 pb-4"
+      >
         {send.error ? (
           <p className="pb-2 text-sm text-destructive" role="alert">
             {send.error.message}

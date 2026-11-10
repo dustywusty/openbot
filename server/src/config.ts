@@ -302,6 +302,8 @@ export type DeploymentConfig = {
    * packages but not a copy of one running alongside the original. See channels/thread-identity.ts.
    */
   deploymentId: string | undefined;
+  /** Public root-bound native identity, supplied only by OpenBot Desktop beside its per-run host token. */
+  desktopInstallationId?: string;
   /**
    * The OpenBot release this server runs, such as `v0.3.1`, from OPENBOT_BUILD_VERSION: release CI
    * bakes it into the image, and OpenBot Desktop sets it from the release it installed. Absent in
@@ -1668,6 +1670,7 @@ export function loadConfig(
     agentEndpointAllowedHosts: agentEndpointAllowedHosts(environment),
     ...thisMachineHost(environment),
     deploymentId: optional(environment, "DEPLOYMENT_ID"),
+    ...(optional(environment, "OPENBOT_DESKTOP_INSTALLATION_ID") ? { desktopInstallationId: optional(environment, "OPENBOT_DESKTOP_INSTALLATION_ID") } : {}),
     ...(optional(environment, "OPENBOT_BUILD_VERSION")
       ? { version: optional(environment, "OPENBOT_BUILD_VERSION") as string }
       : {}),

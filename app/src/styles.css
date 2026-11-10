@@ -5,7 +5,11 @@
 @import "prompt-area/tailwind.css";
 @import "@fontsource-variable/inter";
 @import "./theme.css";
+/* OpenBot's released look. Other skins keep their own frame and typeface. */
+@import "./frame.css";
+@import "./typeface.css";
 @import "./skins/skins.css";
+@import "./chat-width.css";
 
 /*
  * Streamdown draws a Bot's prose, and Tailwind only ships classes it can see used. Its markup lives

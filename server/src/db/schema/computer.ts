@@ -11,9 +11,53 @@ import {
   primaryKey,
   text,
   timestamp,
+  uniqueIndex,
+  uuid,
 } from "drizzle-orm/pg-core";
 import type { RuleLabel } from "../../computer/policy";
+import { users } from "./core";
 import { jsonb } from "./json";
+
+/** Random database audience, distinct from a tenant/package name and a process epoch. */
+export const desktopPairingInstallation = pgTable(
+  "desktop_pairing_installation",
+  {
+    id: text("id").primaryKey(),
+    audience: uuid("audience").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+);
+
+/** Only a voucher hash persists here. The actual voucher belongs to the native OS credential store. */
+export const desktopComputerPairings = pgTable(
+  "desktop_computer_pairings",
+  {
+    id: uuid("id").primaryKey(),
+    installationId: text("installation_id").notNull(),
+    computerId: text("computer_id").notNull(),
+    ownerUserId: text("owner_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    secretHash: text("secret_hash").notNull(),
+    name: text("name").notNull(),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("desktop_computer_pairings_installation_vm_idx").on(
+      table.installationId,
+      table.computerId,
+    ),
+    index("desktop_computer_pairings_owner_idx").on(table.ownerUserId),
+  ],
+);
 
 /**
  * The boundary this deployment is enforcing, kept where a restart cannot lose it.

@@ -1,3 +1,8 @@
+import {
+  createDesktopModelRoutes,
+  type DesktopModelChoices,
+} from "./computer/model-choice";
+import { createDesktopComputerRoutes } from "./computer/desktop-routes";
 import { MAX_IMAGE_BYTES } from "@openbot/shared/attachments";
 import type { WhatIfVocabulary } from "@openbot/shared/what-if";
 import type { Hono as HonoApp, MiddlewareHandler } from "hono";
@@ -450,6 +455,11 @@ export function createApp(
   voiceSessions?: VoiceSessionServices,
   learning?: LearningAdminDependencies,
   coworker?: {
+    desktopModelChoices?: DesktopModelChoices;
+    desktopComputers?: Omit<
+      Parameters<typeof createDesktopComputerRoutes>[0],
+      "requireUser"
+    >;
     productTelemetry?: ProductTelemetry;
     approvals?: ApprovalService;
     /** The Recorder extension's routes and guards (recorder/wiring.ts). Absent, nothing about it is mounted. */
@@ -1914,6 +1924,20 @@ export function createApp(
    */
   if (coworker?.setup)
     app.route("/api/setup", createSetupRoutes(coworker.setup, requireUser));
+  if (coworker?.desktopModelChoices)
+    app.route(
+      "/api/channels",
+      createDesktopModelRoutes(coworker.desktopModelChoices, requireUser),
+    );
+  if (coworker?.desktopComputers)
+    app.route(
+      "/api/desktop-computers",
+      createDesktopComputerRoutes({
+        ...coworker.desktopComputers,
+        requireUser,
+        skillStore: pluginStore,
+      }),
+    );
   if (coworker?.models)
     app.route("/api/models", createModelRoutes(coworker.models, requireUser));
   if (coworker?.modelChoices)

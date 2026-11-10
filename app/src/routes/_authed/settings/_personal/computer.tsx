@@ -1,6 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { ComputersPage } from "@/components/manage/computers-page";
+import { redirect } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/_authed/settings/_personal/computer")({
-  component: ComputersPage,
+  beforeLoad: () => {
+    throw redirect({ to: "/computers" });
+  },
 });

@@ -1,5 +1,5 @@
 /**
- * Settings → This computer: the Back end section. Only OpenBot Desktop has this page, and Desktop
+ * Computers → OpenBot home: the Back end section. Only OpenBot Desktop has this page, and Desktop
  * runs the personal edition, whose local Intelligence isn't licensed for memory. So the section says
  * nothing about a Bot's memory; how much of the computer's memory it uses still shows.
  *
@@ -15,12 +15,10 @@ import {
   test,
 } from "bun:test";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
-import { QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, render, within } from "@testing-library/react";
-import type { ComponentType } from "react";
+import { cleanup, within } from "@testing-library/react";
 import type { DesktopStatus } from "@/lib/desktop/queries";
 import { queryClient } from "@/query-client";
-import { Route as ThisComputerRoute } from "@/routes/_authed/settings/this-computer";
+import { renderHomeComputerPage } from "./home-computer.fixture";
 
 const STATUS: DesktopStatus = {
   openbotRunning: true,
@@ -63,12 +61,7 @@ afterAll(async () => {
 });
 
 test("the Back end says what it keeps without mentioning memory", async () => {
-  const Page = ThisComputerRoute.options.component as ComponentType;
-  const view = render(
-    <QueryClientProvider client={queryClient}>
-      <Page />
-    </QueryClientProvider>,
-  );
+  const view = renderHomeComputerPage();
   const heading = await view.findByRole("heading", { name: "Back end" });
   const section = heading.closest("section") as HTMLElement;
   expect(
