@@ -7,6 +7,7 @@ import { testAgentConnection } from "./connection-test";
 import { checkAgentEndpoint } from "./endpoint";
 import { canManageAgent } from "./profile-policy";
 import {
+  AgentKeyRequiredError,
   AgentNotFoundError,
   AgentNotManageableError,
   type AgentProfileStore,
@@ -754,6 +755,9 @@ function mapStoreError(context: Context, error: unknown): Response {
     return context.json({ error: "System-owned agents are protected." }, 403);
   }
   if (error instanceof ManagedAgentUnavailableError) {
+    return context.json({ error: error.message }, 400);
+  }
+  if (error instanceof AgentKeyRequiredError) {
     return context.json({ error: error.message }, 400);
   }
   throw error;

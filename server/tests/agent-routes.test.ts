@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { MiddlewareHandler } from "hono";
 import { Hono } from "hono";
 import {
+  AgentKeyRequiredError,
   AgentNotFoundError,
   AgentNotManageableError,
   type AgentProfileStore,
@@ -510,6 +511,11 @@ describe("agent lifecycle routes", () => {
       new ProtectedAgentError("agent-1"),
       403,
       "System-owned agents are protected.",
+    ],
+    [
+      new AgentKeyRequiredError(),
+      400,
+      "This coworker has a key. Enter the key for the new endpoint: a stored key is never sent to a new address.",
     ],
   ])("maps known store errors", async (error, status, message) => {
     const store = fakeStore({

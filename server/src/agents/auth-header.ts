@@ -48,6 +48,31 @@ export function authFromConfiguration(
 }
 
 /**
+ * Whether an edit would send the stored key to an address it was never given for.
+ *
+ * A key is write-only, so an edit form leaves it blank to mean "keep it". That is safe while the
+ * endpoint stays where it is. When the endpoint moves, the same blank would carry the stored key to
+ * the new address on the next run: anybody allowed to manage the coworker — an administrator on
+ * somebody else's, too — could read a key they were never shown by pointing the coworker at a server
+ * of their own. So a move with a key behind it needs the key typed again, for the new address.
+ *
+ * True only when all three hold: an endpoint was sent, it differs from the stored one, and a key is
+ * stored with no replacement sent beside it.
+ */
+export function keyWouldFollowEndpoint(
+  previous: unknown,
+  input: { endpoint?: string; auth?: unknown },
+): boolean {
+  if (!input.endpoint || input.auth) return false;
+  if (!authFromConfiguration(previous)) return false;
+  const stored =
+    previous && typeof previous === "object"
+      ? (previous as { endpoint?: unknown }).endpoint
+      : undefined;
+  return stored !== input.endpoint;
+}
+
+/**
  * Put an agent's key in the vault and return the reference to store on the agent.
  *
  * `keyId` is the agent's own id, so an operator listing credentials can see which agent a row belongs

@@ -8,6 +8,14 @@ Newest first. `Unreleased` is what is on `main` and not yet tagged.
 
 ## Unreleased
 
+### Change where a coworker you host runs, and its key
+
+The Connection section of a coworker now has an Edit button for people who can manage that
+coworker. You can change the agent endpoint, test it from the server, and replace the key. The key
+field is always empty, because the key is never sent back to the browser. Leave it empty to keep
+the current key. When you move the endpoint of a coworker that has a key, you must type the key
+again. The server refuses the move without it, so a stored key is never sent to a new address.
+
 ### Dictate messages and talk to a coworker in a live voice call
 
 Deployments can configure transcription separately from their Bots' models, with a waveform composer
