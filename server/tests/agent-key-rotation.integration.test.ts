@@ -1,7 +1,10 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { randomUUID } from "node:crypto";
 import { and, eq, inArray, isNull } from "drizzle-orm";
-import { createAgentProfileStore } from "../src/agents/profile-store";
+import {
+  AgentKeyRequiredError,
+  createAgentProfileStore,
+} from "../src/agents/profile-store";
 import type { AgentActor } from "../src/agents/profile-types";
 import { createCredentialStore } from "../src/credentials";
 import { createDatabase } from "../src/db/client";
@@ -157,5 +160,100 @@ describe("editing a Bot's key", () => {
     expect(await liveKeysFor(profile.id)).toHaveLength(1);
     await within("the deletion", profiles.softDelete(actor, profile.id));
     expect(await liveKeysFor(profile.id)).toHaveLength(0);
+  });
+});
+
+describe("moving a Bot that holds a key", () => {
+  const base = {
+    title: "Tester",
+    roleDescription: "Holds a key while its endpoint moves.",
+    visibility: "private" as const,
+  };
+
+  async function storedConfiguration(agentId: string) {
+    const [row] = await database
+      .select({ configuration: agents.configuration })
+      .from(agents)
+      .where(eq(agents.id, agentId));
+    return row?.configuration as { endpoint?: string } | undefined;
+  }
+
+  test("a move with no new key is refused and changes nothing", async () => {
+    const profile = await profiles.create(actor, {
+      ...base,
+      name: `key move refused ${suite}`,
+      endpoint: "https://example.invalid/agent",
+      auth: { header: "Authorization", value: "kept-secret" },
+    });
+    created.push(profile.id);
+    const [before] = await liveKeysFor(profile.id);
+
+    await expect(
+      within(
+        "the move",
+        profiles.update(actor, profile.id, {
+          ...base,
+          name: `key move refused ${suite}`,
+          endpoint: "https://elsewhere.invalid/agent",
+        }),
+      ),
+    ).rejects.toBeInstanceOf(AgentKeyRequiredError);
+
+    expect((await storedConfiguration(profile.id))?.endpoint).toBe(
+      "https://example.invalid/agent",
+    );
+    const live = await liveKeysFor(profile.id);
+    expect(live).toHaveLength(1);
+    expect(live[0]?.id).toBe(before?.id);
+  });
+
+  test("a move with a new key moves and rotates the key", async () => {
+    const profile = await profiles.create(actor, {
+      ...base,
+      name: `key move allowed ${suite}`,
+      endpoint: "https://example.invalid/agent",
+      auth: { header: "Authorization", value: "old-secret" },
+    });
+    created.push(profile.id);
+    const [before] = await liveKeysFor(profile.id);
+
+    const moved = await within(
+      "the move",
+      profiles.update(actor, profile.id, {
+        ...base,
+        name: `key move allowed ${suite}`,
+        endpoint: "https://elsewhere.invalid/agent",
+        auth: { header: "Authorization", value: "new-secret" },
+      }),
+    );
+
+    expect(moved.endpoint).toBe("https://elsewhere.invalid/agent");
+    const live = await liveKeysFor(profile.id);
+    expect(live).toHaveLength(1);
+    expect(live[0]?.id).not.toBe(before?.id);
+  });
+
+  test("an edit that keeps the endpoint and sends no key keeps the key", async () => {
+    const profile = await profiles.create(actor, {
+      ...base,
+      name: `key kept ${suite}`,
+      endpoint: "https://example.invalid/agent",
+      auth: { header: "Authorization", value: "kept-secret" },
+    });
+    created.push(profile.id);
+    const [before] = await liveKeysFor(profile.id);
+
+    await within(
+      "the edit",
+      profiles.update(actor, profile.id, {
+        ...base,
+        name: `key kept renamed ${suite}`,
+        endpoint: "https://example.invalid/agent",
+      }),
+    );
+
+    const live = await liveKeysFor(profile.id);
+    expect(live).toHaveLength(1);
+    expect(live[0]?.id).toBe(before?.id);
   });
 });

@@ -9,6 +9,7 @@ import {
 } from "../db/schema";
 import {
   authFromConfiguration,
+  keyWouldFollowEndpoint,
   retireReplacedKey,
   storeAgentAuth,
 } from "./auth-header";
@@ -109,6 +110,16 @@ export class ProtectedAgentError extends Error {
   constructor(id: string) {
     super(`Agent ${id} is protected.`);
     this.name = "ProtectedAgentError";
+  }
+}
+
+/** An endpoint move that would carry the stored key along. See `keyWouldFollowEndpoint`. */
+export class AgentKeyRequiredError extends Error {
+  constructor() {
+    super(
+      "This coworker has a key. Enter the key for the new endpoint: a stored key is never sent to a new address.",
+    );
+    this.name = "AgentKeyRequiredError";
   }
 }
 
@@ -514,6 +525,10 @@ export function createAgentProfileStore(
             string,
             unknown
           >;
+          // Before anything is written, so a refused move changes nothing.
+          if (keyWouldFollowEndpoint(previous, input)) {
+            throw new AgentKeyRequiredError();
+          }
           /**
            * A coworker that runs here runs on its role description, so editing one has to move both.
            *

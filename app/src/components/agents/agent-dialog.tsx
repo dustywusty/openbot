@@ -30,6 +30,7 @@ import {
   EmptyHeader,
   EmptyTitle,
 } from "@/components/ui/empty";
+import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import {
   Item,
@@ -69,7 +70,12 @@ import {
   setAgentHiddenMutationOptions,
   updateAgentMutationOptions,
 } from "@/lib/agents/mutations";
-import { type AgentProfile, agentQueryOptions } from "@/lib/agents/queries";
+import {
+  type AgentProfile,
+  agentQueryOptions,
+  type ConnectionVerdict,
+  testAgentConnection,
+} from "@/lib/agents/queries";
 import { isComposing } from "@/lib/composing";
 import { agentPluginsQueryOptions } from "@/lib/plugins/queries";
 import { readToolName } from "@/lib/plugins/tool-name";
@@ -668,12 +674,11 @@ function ConnectionSection({
   }
   return (
     <>
-      <section className="grid gap-2">
-        <h2 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-          Endpoint
-        </h2>
-        <p className="break-all font-mono text-sm">{profile.endpoint}</p>
-      </section>
+      <EditableConnection
+        agentId={agentId}
+        endpoint={profile.endpoint}
+        profile={profile}
+      />
       {profile.canManage ? (
         <CallbackTokenPanel
           agentId={agentId}
@@ -681,6 +686,229 @@ function ConnectionSection({
         />
       ) : null}
     </>
+  );
+}
+
+/** What a stored key moving to a new address needs, said the way the server says it. */
+const KEY_REQUIRED =
+  "This coworker has a key. Enter the key for the new endpoint: a stored key is never sent to a new address.";
+
+/**
+ * Where a coworker somebody hosts runs, and the key it sits behind, edited in place.
+ *
+ * The same two facts the create wizard asks for, with the same checks: the endpoint against the
+ * shared form contract (the server then applies the deployment's own host rules), and Test dialling
+ * it from the server, which is what a run will do.
+ *
+ * THE KEY IS WRITE-ONLY HERE TOO. The server never sends it back, so the field always opens empty,
+ * and empty means "keep the one that is stored". The one exception is a move: a blank key beside a
+ * new endpoint would carry the stored key to an address it was never given for, so the server
+ * refuses that and this form says so before asking.
+ *
+ * The typed key lives in this component's state only while the form is open. Closing the form,
+ * saving, or failing clears it from state, and the mutation is reset after the request so its
+ * variables — which carry the key — do not outlive the request in the query client either.
+ */
+function EditableConnection({
+  agentId,
+  endpoint,
+  profile,
+}: {
+  agentId: string;
+  endpoint: string;
+  profile: AgentProfile;
+}) {
+  const queryClient = useQueryClient();
+  const updateAgent = useMutation(updateAgentMutationOptions(queryClient));
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(endpoint);
+  const [key, setKey] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [testing, setTesting] = useState(false);
+  const [verdict, setVerdict] = useState<ConnectionVerdict | null>(null);
+
+  const close = () => {
+    setEditing(false);
+    setKey("");
+    setError(null);
+    setVerdict(null);
+  };
+
+  /** The form's endpoint, or the reason it cannot be saved. */
+  const checkedEndpoint = (): { ok: true; value: string } | { ok: false } => {
+    const trimmed = draft.trim();
+    if (trimmed === "") {
+      setError("An endpoint is required for a coworker you host.");
+      return { ok: false };
+    }
+    const parsed = agentFormSchema.shape.endpoint.safeParse(trimmed);
+    if (!parsed.success) {
+      setError(parsed.error.issues[0]?.message ?? "That address does not fit.");
+      return { ok: false };
+    }
+    return { ok: true, value: parsed.data };
+  };
+
+  const test = async () => {
+    setError(null);
+    const checked = checkedEndpoint();
+    if (!checked.ok) return;
+    setTesting(true);
+    setVerdict(null);
+    try {
+      setVerdict(await testAgentConnection(checked.value, key));
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  const submit = async () => {
+    setError(null);
+    const checked = checkedEndpoint();
+    if (!checked.ok) return;
+    if (checked.value !== endpoint && profile.hasAuth && !key.trim()) {
+      setError(KEY_REQUIRED);
+      return;
+    }
+    setSaving(true);
+    try {
+      await updateAgent.mutateAsync({
+        agentId,
+        input: agentInputFrom({
+          name: profile.name,
+          title: profile.title,
+          roleDescription: profile.roleDescription,
+          visibility: profile.visibility,
+          endpoint: checked.value,
+          authValue: key,
+        }),
+      });
+      close();
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : "Could not save.");
+    } finally {
+      // The variables held the key. The request is over, so nothing needs them.
+      updateAgent.reset();
+      setSaving(false);
+    }
+  };
+
+  if (!editing) {
+    return (
+      <div className="flex flex-col gap-2">
+        <Item variant="muted">
+          <ItemContent className="min-w-0">
+            <ItemTitle>Endpoint</ItemTitle>
+            <ItemDescription className="break-all font-mono">
+              {endpoint}
+            </ItemDescription>
+          </ItemContent>
+          {profile.canManage ? (
+            <ItemActions>
+              <Button
+                aria-label="Edit connection"
+                onClick={() => {
+                  setDraft(endpoint);
+                  setKey("");
+                  setEditing(true);
+                }}
+                size="icon-sm"
+                variant="ghost"
+              >
+                <IconPencil />
+              </Button>
+            </ItemActions>
+          ) : null}
+        </Item>
+        <Item variant="muted">
+          <ItemContent>
+            <ItemTitle>Key</ItemTitle>
+            <ItemDescription>
+              {profile.hasAuth
+                ? "Set. Sent as a header on every run. It is never shown again."
+                : "Not set. Runs send no key."}
+            </ItemDescription>
+          </ItemContent>
+        </Item>
+      </div>
+    );
+  }
+
+  return (
+    <Item variant="muted">
+      <ItemContent className="min-w-0">
+        <ItemTitle>Connection</ItemTitle>
+        <FieldGroup className="mt-2">
+          <Field>
+            <FieldLabel htmlFor="edit-agent-endpoint">
+              Agent endpoint
+            </FieldLabel>
+            <div className="flex gap-2">
+              <Input
+                autoFocus
+                id="edit-agent-endpoint"
+                onChange={(event) => {
+                  setDraft(event.target.value);
+                  setVerdict(null);
+                }}
+                placeholder="https://your-agent.example.com/ag-ui"
+                value={draft}
+              />
+              <Button
+                disabled={!draft.trim() || testing || saving}
+                onClick={() => void test()}
+                type="button"
+                variant="outline"
+              >
+                {testing ? "Testing…" : "Test"}
+              </Button>
+            </div>
+            {verdict ? (
+              <p
+                className={`text-sm ${verdict.ok ? "text-muted-foreground" : "text-destructive"}`}
+                role="status"
+              >
+                {verdict.ok
+                  ? `It answered: ${verdict.events.join(", ")}`
+                  : verdict.reason}
+              </p>
+            ) : null}
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="edit-agent-key">
+              {profile.hasAuth ? "New key" : "Key (optional)"}
+            </FieldLabel>
+            <Input
+              autoComplete="off"
+              id="edit-agent-key"
+              onChange={(event) => setKey(event.target.value)}
+              placeholder="Bearer …"
+              type="password"
+              value={key}
+            />
+            <p className="text-muted-foreground text-sm">
+              {profile.hasAuth
+                ? "Leave empty to keep the current key. Enter it again if you change the endpoint. Test uses only the key you type here."
+                : "Sent as an Authorization header on every run, and kept in the credential vault."}
+            </p>
+          </Field>
+        </FieldGroup>
+        {error ? (
+          <p className="text-sm text-destructive" role="alert">
+            {error}
+          </p>
+        ) : null}
+        <div className="mt-1 flex gap-2">
+          <Button disabled={saving} onClick={() => void submit()} size="sm">
+            {saving ? "Saving…" : "Save"}
+          </Button>
+          <Button disabled={saving} onClick={close} size="sm" variant="outline">
+            Cancel
+          </Button>
+        </div>
+      </ItemContent>
+    </Item>
   );
 }
 
